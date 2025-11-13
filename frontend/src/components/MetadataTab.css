@@ -1,0 +1,94 @@
+/**
+ * Стили для компонента MetadataTab.
+ */
+
+.MetadataTab .metadata-section {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.MetadataTab .metadata-section:last-child {
+  border-bottom: none;
+}
+
+.MetadataTab .metadata-section h3 {
+  margin-top: 0;
+  color: #2c3e50;
+}
+
+.MetadataTab .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.MetadataTab .summary-item {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.MetadataTab .summary-item .label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.MetadataTab .summary-item .value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #3498db;
+}
+
+.MetadataTab .contact-group {
+  margin-bottom: 1.5rem;
+}
+
+.MetadataTab .contact-group h4 {
+  margin-bottom: 0.5rem;
+  color: #555;
+}
+
+.MetadataTab .contact-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.MetadataTab .contact-group li {
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
+.MetadataTab .contact-group a {
+  color: #3498db;
+  text-decoration: none;
+}
+
+.MetadataTab .contact-group a:hover {
+  text-decoration: underline;
+}
+
+.MetadataTab .extra-text-list {
+  list-style: none;
+  padding: 0;
+}
+
+.MetadataTab .extra-text-list li {
+  padding: 0.75rem;
+  background-color: #fff3cd;
+  margin-bottom: 0.5rem;
+  border-left: 3px solid #ffc107;
+  border-radius: 4px;
+}
+
+.MetadataTab .empty {
+  color: #999;
+  font-style: italic;
+}
+

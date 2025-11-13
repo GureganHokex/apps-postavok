@@ -1,0 +1,91 @@
+/**
+ * Стили для компонента OrderForm.
+ */
+
+.OrderForm .order-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.OrderForm .format-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.OrderForm .format-selector select {
+  width: auto;
+  padding: 0.5rem;
+}
+
+.OrderForm .order-summary {
+  display: flex;
+  gap: 2rem;
+}
+
+.OrderForm .summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.OrderForm .summary-item .label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+
+.OrderForm .summary-item .value {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #3498db;
+}
+
+.OrderForm .table-container {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.OrderForm .input-small {
+  width: 80px;
+  padding: 0.25rem;
+  text-align: center;
+}
+
+.OrderForm .sum {
+  font-weight: bold;
+  color: #27ae60;
+}
+
+.OrderForm .total-label {
+  font-weight: bold;
+  text-align: right;
+  padding-right: 1rem;
+}
+
+.OrderForm .total-value {
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: #3498db;
+}
+
+.OrderForm .order-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.OrderForm .empty-message {
+  text-align: center;
+  padding: 3rem;
+  color: #999;
+}
+
+.OrderForm .empty-message p {
+  font-size: 1.1rem;
+}
+

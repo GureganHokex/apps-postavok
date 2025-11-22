@@ -211,7 +211,11 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       <div className="card">
         <h2>Формирование заказа</h2>
 
-        <OrderTemplates onApplyTemplate={handleApplyTemplate} />
+        <OrderTemplates 
+          onApplyTemplate={handleApplyTemplate}
+          currentItems={orderItems}
+          currentQuantities={quantities}
+        />
 
           <div className="order-controls">
             <div className="format-selector">

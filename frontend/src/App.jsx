@@ -13,15 +13,24 @@ import OrderForm from './components/OrderForm';
 import OrdersHistory from './components/OrdersHistory';
 import ThemeToggle from './components/ThemeToggle';
 import StatisticsDashboard from './components/StatisticsDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
-// Настройка React Query
+// Настройка React Query с улучшенным кэшированием
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 10 * 60 * 1000, // 10 минут
+      cacheTime: 30 * 60 * 1000, // 30 минут
+      keepPreviousData: true, // Сохраняем предыдущие данные при загрузке новых
+    },
+    mutations: {
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 минут
+      retryDelay: 1000,
     },
   },
 });
@@ -83,8 +92,9 @@ function App() {
   }, [currentFile]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="App">
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <div className="App">
         <Toaster
           position="top-right"
           toastOptions={{
@@ -116,20 +126,25 @@ function App() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <motion.h1
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-        >
-          Пивной импортер
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.9 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-        >
-          Парсинг прайсов для баров
-        </motion.p>
+        <div className="header-content">
+          <div>
+            <motion.h1
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+            >
+              Пивной импортер
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.9 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+            >
+              Парсинг прайсов для баров
+            </motion.p>
+          </div>
+          <ThemeToggle />
+        </div>
       </motion.header>
 
         <nav className="App-nav">
@@ -164,13 +179,6 @@ function App() {
               🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
             </button>
             <button
-              className={activeTab === 'orders-history' ? 'active' : ''}
-              onClick={() => setActiveTab('orders-history')}
-              aria-label="История заказов"
-            >
-              📜 История заказов
-            </button>
-            <button
               className={activeTab === 'statistics' ? 'active' : ''}
               onClick={() => setActiveTab('statistics')}
               aria-label="Статистика"
@@ -179,6 +187,13 @@ function App() {
             </button>
           </>
         )}
+        <button
+          className={activeTab === 'orders-history' ? 'active' : ''}
+          onClick={() => setActiveTab('orders-history')}
+          aria-label="История заказов"
+        >
+          📜 История заказов
+        </button>
       </nav>
 
       <main className="App-main">
@@ -272,8 +287,9 @@ function App() {
           )}
         </AnimatePresence>
       </main>
-      </div>
-    </QueryClientProvider>
+        </div>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -8,27 +8,34 @@ import toast from 'react-hot-toast';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import './OrderTemplates.css';
 
-function OrderTemplates({ onApplyTemplate }) {
+function OrderTemplates({ onApplyTemplate, currentItems, currentQuantities }) {
   const [templates, setTemplates] = useLocalStorage('order_templates', []);
   const [showModal, setShowModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [editingTemplate, setEditingTemplate] = useState(null);
 
-  const handleSaveTemplate = (items, quantities) => {
+  const handleSaveTemplate = () => {
     if (!templateName.trim()) {
       toast.error('Введите название шаблона');
+      return;
+    }
+
+    if (!currentItems || currentItems.length === 0) {
+      toast.error('Нет позиций для сохранения в шаблон');
       return;
     }
 
     const template = {
       id: Date.now(),
       name: templateName,
-      items: items.map(item => ({
+      items: currentItems.map(item => ({
         item_id: item.id,
-        quantity: quantities[item.id] || 0,
+        quantity: currentQuantities[item.id] || 0,
         brewery: item.brewery,
         beer_name: item.beer_name,
         price: item.price,
+        style: item.style,
+        format_type: item.format_type,
       })),
       created_at: new Date().toISOString(),
     };
@@ -57,12 +64,14 @@ function OrderTemplates({ onApplyTemplate }) {
     <div className="OrderTemplates">
       <div className="templates-header">
         <h3>Шаблоны заказов</h3>
-        <button
-          className="button button-primary"
-          onClick={() => setShowModal(true)}
-        >
-          + Создать шаблон
-        </button>
+        {currentItems && currentItems.length > 0 && (
+          <button
+            className="button button-primary"
+            onClick={() => setShowModal(true)}
+          >
+            + Создать шаблон
+          </button>
+        )}
       </div>
 
       {templates.length === 0 ? (
@@ -130,16 +139,17 @@ function OrderTemplates({ onApplyTemplate }) {
             <div className="modal-actions">
               <button
                 className="button button-primary"
-                onClick={() => {
-                  // Это будет вызвано из OrderForm
-                  setShowModal(false);
-                }}
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
               >
                 Сохранить
               </button>
               <button
-                className="button"
-                onClick={() => setShowModal(false)}
+                className="button button-secondary"
+                onClick={() => {
+                  setShowModal(false);
+                  setTemplateName('');
+                }}
               >
                 Отмена
               </button>

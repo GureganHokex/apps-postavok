@@ -1,98 +1,57 @@
-/**
- * Стили для компонента массовых операций
- */
-
-.BulkActions {
-  margin-bottom: var(--spacing-md);
+.bulk-actions {
+  background: var(--color-bg-secondary, #f8f9fa);
+  border: 1px solid var(--color-border, #dee2e6);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
 }
 
-.BulkActions .bulk-actions-bar {
+.bulk-actions-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-md);
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  color: white;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.BulkActions .bulk-info {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.BulkActions .bulk-count {
+.bulk-actions-count {
   font-weight: 600;
-  font-size: var(--font-lg);
+  color: var(--color-primary, #007bff);
 }
 
-.BulkActions .bulk-buttons {
+.bulk-actions-buttons {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.BulkActions .bulk-buttons button {
-  background-color: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+.bulk-edit-form {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border, #dee2e6);
 }
 
-.BulkActions .bulk-buttons button:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+.bulk-edit-form h4 {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
-.BulkActions .bulk-update-form,
-.BulkActions .bulk-delete-confirm {
-  padding: var(--spacing-lg);
-  background-color: var(--bg-primary);
-  border: 2px solid var(--primary-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+.bulk-edit-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
-.BulkActions .bulk-update-form h3,
-.BulkActions .bulk-delete-confirm h3 {
-  margin-top: 0;
-  margin-bottom: var(--spacing-md);
-  color: var(--text-primary);
-}
-
-.BulkActions .form-group {
-  margin-bottom: var(--spacing-md);
-}
-
-.BulkActions .form-group label {
-  display: block;
-  margin-bottom: var(--spacing-sm);
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.BulkActions .price-change-controls {
+.bulk-edit-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.BulkActions .price-change-controls select {
-  flex: 0 0 200px;
-}
-
-.BulkActions .price-change-controls input {
-  flex: 1;
-}
-
-.BulkActions .form-actions {
+.price-change-buttons {
   display: flex;
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-lg);
+  gap: 0.5rem;
 }
-
-.BulkActions .bulk-delete-confirm p {
-  margin-bottom: var(--spacing-lg);
-  color: var(--text-secondary);
-  font-size: var(--font-lg);
-}
-

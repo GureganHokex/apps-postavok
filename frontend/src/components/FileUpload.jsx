@@ -2,16 +2,19 @@
  * Компонент для загрузки файлов через drag&drop.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 import { uploadFile, parseFile, getFileItems, getFileMetadata } from '../api';
+import { ParseProgress } from './ParseProgress';
 import './FileUpload.css';
 
 function FileUpload({ onFileUploaded, onParseComplete }) {
   const [uploading, setUploading] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState(0);
+  const [parseMessage, setParseMessage] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -52,12 +55,30 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
     try {
       setParsing(true);
       setError(null);
+      setParseProgress(10);
+      setParseMessage('Запуск парсинга...');
+      
+      // Симуляция прогресса для лучшего UX
+      const progressInterval = setInterval(() => {
+        setParseProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 10;
+        });
+      }, 500);
       
       // Запускаем парсинг
+      setParseMessage('Обработка файла...');
+      setParseProgress(30);
       const parseResult = await parseFile(fileData.id);
+      
+      clearInterval(progressInterval);
+      setParseProgress(60);
+      setParseMessage('Загрузка позиций...');
       
       // Получаем распарсенные позиции
       const itemsData = await getFileItems(fileData.id);
+      setParseProgress(80);
+      setParseMessage('Загрузка метаданных...');
       
       // Получаем метаданные
       let metadataData = null;
@@ -67,7 +88,10 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
         // Метаданные могут отсутствовать, если парсинг не завершился
       }
       
-      const successMsg = `Парсинг завершен. Найдено позиций: ${parseResult.items_created}`;
+      setParseProgress(100);
+      setParseMessage('Завершено!');
+      
+      const successMsg = `Парсинг завершен. Найдено позиций: ${parseResult.items_created || itemsData.length}`;
       toast.success(successMsg);
       setSuccess(successMsg);
       
@@ -78,12 +102,20 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
       if (onParseComplete) {
         onParseComplete(parseResult, itemsData, metadataData);
       }
+      
+      // Скрываем прогресс через секунду
+      setTimeout(() => {
+        setParsing(false);
+        setParseProgress(0);
+        setParseMessage('');
+      }, 1000);
     } catch (err) {
       const errorMsg = `Ошибка парсинга: ${err.message}`;
       toast.error(errorMsg);
       setError(errorMsg);
-    } finally {
       setParsing(false);
+      setParseProgress(0);
+      setParseMessage('');
     }
   };
 
@@ -100,6 +132,11 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
 
   return (
     <div className="FileUpload">
+      <ParseProgress
+        isVisible={parsing}
+        progress={parseProgress}
+        message={parseMessage}
+      />
       <div className="card">
         <h2>Загрузка файлов</h2>
         <p>Поддерживаемые форматы: PDF, Excel (.xls, .xlsx), ZIP архивы</p>

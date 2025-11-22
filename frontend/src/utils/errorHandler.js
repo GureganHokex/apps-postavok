@@ -1,16 +1,11 @@
 /**
- * Утилиты для обработки ошибок с retry механизмом
+ * Утилиты для обработки ошибок API
  */
 
 import toast from 'react-hot-toast';
 
 /**
- * Выполняет функцию с повторными попытками при ошибке
- * @param {Function} fn - Функция для выполнения
- * @param {Object} options - Опции retry
- * @param {number} options.maxRetries - Максимальное количество попыток
- * @param {number} options.delay - Задержка между попытками (мс)
- * @param {Function} options.onRetry - Callback при повторной попытке
+ * Повторяет выполнение функции с задержкой при ошибке
  */
 export async function retry(fn, options = {}) {
   const {
@@ -20,68 +15,54 @@ export async function retry(fn, options = {}) {
   } = options;
 
   let lastError;
-  
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      
       if (attempt < maxRetries) {
         if (onRetry) {
-          onRetry(attempt + 1, maxRetries, error);
-        } else {
-          toast.loading(
-            `Повторная попытка ${attempt + 1}/${maxRetries}...`,
-            { id: 'retry-toast' }
-          );
+          onRetry(attempt, maxRetries);
         }
-        
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
-  
-  toast.dismiss('retry-toast');
   throw lastError;
 }
 
 /**
- * Обрабатывает ошибки API с понятными сообщениями
+ * Обрабатывает ошибки API и показывает уведомления
  */
 export function handleApiError(error) {
+  let message = 'Произошла ошибка';
+  
   if (error.response) {
-    // Сервер ответил с кодом ошибки
+    // Ошибка от сервера
     const status = error.response.status;
-    const message = error.response.data?.detail || error.response.data?.message || 'Ошибка сервера';
+    const data = error.response.data;
     
-    switch (status) {
-      case 400:
-        toast.error(`Некорректный запрос: ${message}`);
-        break;
-      case 401:
-        toast.error('Требуется авторизация');
-        break;
-      case 403:
-        toast.error('Доступ запрещен');
-        break;
-      case 404:
-        toast.error('Ресурс не найден');
-        break;
-      case 500:
-        toast.error('Ошибка сервера. Попробуйте позже');
-        break;
-      default:
-        toast.error(`Ошибка ${status}: ${message}`);
+    if (status === 400) {
+      message = data?.detail || data?.message || 'Неверный запрос';
+    } else if (status === 401) {
+      message = 'Требуется авторизация';
+    } else if (status === 403) {
+      message = 'Доступ запрещен';
+    } else if (status === 404) {
+      message = 'Ресурс не найден';
+    } else if (status === 500) {
+      message = 'Ошибка сервера';
+    } else {
+      message = data?.detail || data?.message || `Ошибка ${status}`;
     }
   } else if (error.request) {
-    // Запрос был отправлен, но ответа не получено
-    toast.error('Нет соединения с сервером. Проверьте подключение к интернету');
+    // Запрос отправлен, но ответа нет
+    message = 'Нет ответа от сервера. Проверьте подключение к интернету.';
   } else {
     // Ошибка при настройке запроса
-    toast.error(`Ошибка: ${error.message}`);
+    message = error.message || 'Ошибка при выполнении запроса';
   }
   
-  return error;
+  toast.error(message);
+  console.error('API Error:', error);
 }
-

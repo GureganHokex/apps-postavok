@@ -1,71 +1,46 @@
-/**
- * Стили для компонента экспорта
- */
-
-.export-button-container {
-  display: inline-block;
+.export-button-wrapper {
   position: relative;
+  display: inline-block;
 }
 
 .export-button {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.export-dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-.export-dropdown:hover .export-menu {
-  display: block;
-  opacity: 1;
-  visibility: visible;
+  gap: 0.5rem;
 }
 
 .export-menu {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: var(--spacing-xs);
-  background-color: var(--bg-primary);
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  min-width: 200px;
+  margin-top: 0.5rem;
+  background: var(--color-bg-primary, #fff);
+  border: 1px solid var(--color-border, #dee2e6);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
-  display: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: var(--transition-base);
+  min-width: 150px;
 }
 
-.export-menu-item {
+.export-option {
   display: block;
   width: 100%;
-  padding: var(--spacing-md);
-  border: none;
-  background: none;
+  padding: 0.75rem 1rem;
   text-align: left;
+  background: none;
+  border: none;
   cursor: pointer;
-  color: var(--text-primary);
-  font-size: var(--font-base);
-  transition: var(--transition-fast);
-  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s;
 }
 
-.export-menu-item:last-child {
-  border-bottom: none;
+.export-option:hover {
+  background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
 }
 
-.export-menu-item:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--primary-color);
+.export-option:first-child {
+  border-radius: 4px 4px 0 0;
 }
 
-.export-menu-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.export-option:last-child {
+  border-radius: 0 0 4px 4px;
 }
-

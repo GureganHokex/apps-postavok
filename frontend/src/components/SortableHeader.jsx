@@ -3,34 +3,34 @@
  */
 
 import React from 'react';
-import { motion } from 'framer-motion';
 import './SortableHeader.css';
 
-function SortableHeader({ columnKey, label, sortConfig, onSort, children }) {
-  const isSorted = sortConfig && sortConfig.key === columnKey;
+export function SortableHeader({ column, sortConfig, onSort, children }) {
+  const isSortable = column.sortable !== false;
+  const isSorted = sortConfig && sortConfig.key === column.key;
   const sortDirection = isSorted ? sortConfig.direction : null;
+
+  const handleClick = () => {
+    if (isSortable && onSort) {
+      onSort(column.key);
+    }
+  };
 
   return (
     <th
-      className={`sortable-header ${isSorted ? 'sorted' : ''}`}
-      onClick={() => onSort(columnKey)}
+      className={`sortable-header ${isSortable ? 'sortable' : ''} ${isSorted ? `sorted-${sortDirection}` : ''}`}
+      onClick={handleClick}
     >
       <div className="header-content">
-        {children || label}
-        <motion.span
-          className="sort-indicator"
-          initial={false}
-          animate={{
-            opacity: isSorted ? 1 : 0.3,
-            rotate: sortDirection === 'desc' ? 180 : 0,
-          }}
-        >
-          {sortDirection === 'asc' ? '↑' : sortDirection === 'desc' ? '↓' : '⇅'}
-        </motion.span>
+        <span>{children}</span>
+        {isSortable && (
+          <span className="sort-indicator">
+            {sortDirection === 'asc' && '↑'}
+            {sortDirection === 'desc' && '↓'}
+            {!sortDirection && '⇅'}
+          </span>
+        )}
       </div>
     </th>
   );
 }
-
-export default SortableHeader;
-

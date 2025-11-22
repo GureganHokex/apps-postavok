@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { getOrders, downloadOrder, getOrder } from '../api';
+import { getOrders, downloadOrder, getOrder, createOrder } from '../api';
 import { useQuery } from '@tanstack/react-query';
 import './OrdersHistory.css';
 
@@ -42,6 +42,36 @@ function OrdersHistory() {
       toast.error(`Ошибка загрузки деталей: ${err.message}`);
     }
   }, []);
+
+  const handleDuplicateOrder = useCallback(async (orderId) => {
+    try {
+      const order = await getOrder(orderId);
+      if (!order.items || order.items.length === 0) {
+        toast.error('Заказ не содержит позиций');
+        return;
+      }
+      
+      // Извлекаем item_id и quantity из заказа
+      const orderItems = order.items.map(item => ({
+        item_id: item.item_id || item.id,
+        quantity: item.quantity || 1,
+      }));
+      
+      // Создаем новый заказ с теми же позициями
+      const newOrder = await createOrder(orderItems, order.export_format || 'excel');
+      toast.success(`Заказ #${order.id} продублирован как заказ #${newOrder.id}`);
+      
+      // Обновляем список заказов
+      refetch();
+      
+      // Автоматически скачиваем новый заказ
+      setTimeout(() => {
+        downloadOrder(newOrder.id);
+      }, 500);
+    } catch (err) {
+      toast.error(`Ошибка дублирования заказа: ${err.message}`);
+    }
+  }, [refetch]);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -184,6 +214,13 @@ function OrdersHistory() {
                       onClick={() => handleViewDetails(order.id)}
                     >
                       Детали
+                    </button>
+                    <button
+                      className="button button-secondary"
+                      onClick={() => handleDuplicateOrder(order.id)}
+                      title="Создать копию этого заказа"
+                    >
+                      🔄 Повторить
                     </button>
                     <button
                       className="button button-success"

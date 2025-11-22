@@ -1,62 +1,43 @@
-/**
- * Стили для контекстного меню
- */
-
 .context-menu {
-  background-color: var(--bg-primary);
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: var(--spacing-xs);
-  min-width: 200px;
+  position: fixed;
+  background: var(--color-bg-primary, #fff);
+  border: 1px solid var(--color-border, #dee2e6);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 10000;
-  overflow: hidden;
+  min-width: 200px;
+  padding: 0.5rem 0;
 }
 
 .context-menu-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
   width: 100%;
-  padding: var(--spacing-md);
-  border: none;
+  padding: 0.75rem 1rem;
   background: none;
+  border: none;
   text-align: left;
   cursor: pointer;
-  color: var(--text-primary);
-  font-size: var(--font-base);
-  transition: var(--transition-fast);
-  border-radius: var(--radius-sm);
+  transition: background-color 0.2s;
+  gap: 0.75rem;
 }
 
-.context-menu-item:hover:not(.disabled) {
-  background-color: var(--bg-tertiary);
-  color: var(--primary-color);
+.context-menu-item:hover {
+  background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
 }
 
-.context-menu-item.danger {
-  color: var(--danger-color);
-}
-
-.context-menu-item.danger:hover:not(.disabled) {
-  background-color: rgba(231, 76, 60, 0.1);
-}
-
-.context-menu-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.menu-icon {
-  font-size: var(--font-lg);
-  width: 20px;
+.context-menu-icon {
+  font-size: 1.2rem;
+  width: 24px;
   text-align: center;
 }
 
-.menu-shortcut {
-  margin-left: auto;
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  font-family: monospace;
+.context-menu-label {
+  flex: 1;
 }
 
+.context-menu-shortcut {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6c757d);
+  opacity: 0.7;
+}

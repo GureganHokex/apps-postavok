@@ -16,6 +16,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+import ExportButton from './ExportButton';
 import './StatisticsDashboard.css';
 
 const COLORS = ['#3498db', '#27ae60', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c'];
@@ -86,10 +88,53 @@ function StatisticsDashboard({ items }) {
     };
   }, [items]);
 
+  const exportData = useMemo(() => {
+    return {
+      summary: totalStats,
+      averagePrice,
+      breweryStats,
+      styleStats,
+      formatStats,
+      generatedAt: new Date().toISOString(),
+    };
+  }, [totalStats, averagePrice, breweryStats, styleStats, formatStats]);
+
+  const handleExportStats = () => {
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `statistics_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success('Статистика экспортирована');
+  };
+
   return (
     <div className="StatisticsDashboard">
       <div className="card">
-        <h2>Статистика</h2>
+        <div className="statistics-header">
+          <h2>Статистика</h2>
+          <div className="statistics-actions">
+            <button
+              className="button button-secondary"
+              onClick={handleExportStats}
+            >
+              📥 Экспорт JSON
+            </button>
+            <ExportButton
+              data={[
+                { type: 'summary', ...totalStats, averagePrice },
+                ...breweryStats.map(s => ({ type: 'brewery', ...s })),
+                ...styleStats.map(s => ({ type: 'style', ...s })),
+                ...formatStats.map(s => ({ type: 'format', ...s })),
+              ]}
+              filename={`statistics_${new Date().toISOString().split('T')[0]}`}
+              formats={['csv', 'json']}
+            />
+          </div>
+        </div>
 
         <div className="stats-grid">
           <motion.div
@@ -154,7 +199,14 @@ function StatisticsDashboard({ items }) {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={breweryStats}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                <XAxis 
+                  dataKey="name" 
+                  angle={-45} 
+                  textAnchor="end" 
+                  height={100}
+                  interval={0}
+                  tick={{ fontSize: 12 }}
+                />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="count" fill={COLORS[0]} />

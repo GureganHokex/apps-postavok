@@ -1,130 +1,85 @@
 /**
- * Компонент поиска с автодополнением
+ * Компонент поля поиска с автодополнением
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useEffect } from 'react';
 import './SearchInput.css';
 
-function SearchInput({ 
-  placeholder = 'Поиск...', 
-  onSearch, 
-  suggestions = [],
-  debounceDelay = 300 
-}) {
-  const [value, setValue] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
+export function SearchInput({ value, onChange, placeholder = 'Поиск...', suggestions = [] }) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const inputRef = useRef(null);
+  const suggestionsRef = useRef(null);
 
-  const filteredSuggestions = useMemo(() => {
-    if (!value || value.length < 2) return [];
-    const lowerValue = value.toLowerCase();
-    return suggestions
-      .filter(suggestion => 
-        typeof suggestion === 'string' 
-          ? suggestion.toLowerCase().includes(lowerValue)
-          : suggestion.label?.toLowerCase().includes(lowerValue)
-      )
-      .slice(0, 5);
-  }, [value, suggestions]);
+  const filteredSuggestions = suggestions.filter(suggestion =>
+    suggestion.toLowerCase().includes(value.toLowerCase())
+  ).slice(0, 5);
 
-  const handleChange = useCallback((e) => {
-    const newValue = e.target.value;
-    setValue(newValue);
-    setFocusedIndex(-1);
-    
-    if (onSearch) {
-      const timeoutId = setTimeout(() => {
-        onSearch(newValue);
-      }, debounceDelay);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [onSearch, debounceDelay]);
+  const handleInputChange = (e) => {
+    onChange(e.target.value);
+    setHighlightedIndex(-1);
+  };
 
-  const handleSelect = useCallback((suggestion) => {
-    const selectedValue = typeof suggestion === 'string' ? suggestion : suggestion.value;
-    setValue(selectedValue);
-    setShowSuggestions(false);
-    if (onSearch) {
-      onSearch(selectedValue);
-    }
-  }, [onSearch]);
+  const handleSuggestionClick = (suggestion) => {
+    onChange(suggestion);
+    setIsFocused(false);
+    inputRef.current?.blur();
+  };
 
-  const handleKeyDown = useCallback((e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setFocusedIndex(prev => 
+      setHighlightedIndex(prev =>
         prev < filteredSuggestions.length - 1 ? prev + 1 : prev
       );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setFocusedIndex(prev => prev > 0 ? prev - 1 : -1);
-    } else if (e.key === 'Enter' && focusedIndex >= 0) {
+      setHighlightedIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
       e.preventDefault();
-      handleSelect(filteredSuggestions[focusedIndex]);
+      handleSuggestionClick(filteredSuggestions[highlightedIndex]);
     } else if (e.key === 'Escape') {
-      setShowSuggestions(false);
+      setIsFocused(false);
+      inputRef.current?.blur();
     }
-  }, [filteredSuggestions, focusedIndex, handleSelect]);
+  };
+
+  useEffect(() => {
+    if (highlightedIndex >= 0 && suggestionsRef.current) {
+      const highlightedElement = suggestionsRef.current.children[highlightedIndex];
+      if (highlightedElement) {
+        highlightedElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [highlightedIndex]);
 
   return (
     <div className="search-input-wrapper">
-      <div className="search-input-container">
-        <span className="search-icon">🔍</span>
-        <input
-          type="text"
-          className="search-input"
-          placeholder={placeholder}
-          value={value}
-          onChange={handleChange}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-          onKeyDown={handleKeyDown}
-        />
-        {value && (
-          <button
-            className="search-clear"
-            onClick={() => {
-              setValue('');
-              if (onSearch) onSearch('');
-            }}
-            aria-label="Очистить поиск"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-      
-      <AnimatePresence>
-        {showSuggestions && filteredSuggestions.length > 0 && (
-          <motion.ul
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="search-suggestions"
-          >
-            {filteredSuggestions.map((suggestion, index) => {
-              const displayValue = typeof suggestion === 'string' 
-                ? suggestion 
-                : suggestion.label;
-              
-              return (
-                <motion.li
-                  key={index}
-                  className={`suggestion-item ${index === focusedIndex ? 'focused' : ''}`}
-                  onClick={() => handleSelect(suggestion)}
-                  whileHover={{ backgroundColor: 'var(--bg-tertiary)' }}
-                >
-                  {displayValue}
-                </motion.li>
-              );
-            })}
-          </motion.ul>
-        )}
-      </AnimatePresence>
+      <input
+        ref={inputRef}
+        type="text"
+        className="search-input"
+        value={value}
+        onChange={handleInputChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+      />
+      {isFocused && filteredSuggestions.length > 0 && (
+        <ul ref={suggestionsRef} className="search-suggestions">
+          {filteredSuggestions.map((suggestion, index) => (
+            <li
+              key={index}
+              className={index === highlightedIndex ? 'highlighted' : ''}
+              onClick={() => handleSuggestionClick(suggestion)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+            >
+              {suggestion}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
-
-export default SearchInput;
-

@@ -2,6 +2,29 @@
  * Стили для компонента статистики
  */
 
+.StatisticsDashboard {
+  width: 100%;
+}
+
+.statistics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.statistics-header h2 {
+  margin: 0;
+}
+
+.statistics-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
 .StatisticsDashboard .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

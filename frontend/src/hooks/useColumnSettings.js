@@ -1,70 +1,51 @@
 /**
- * Хук для управления настройками колонок
+ * Хук для управления настройками колонок таблицы
  */
 
+import { useCallback } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 
-const defaultColumns = {
-  brewery: { visible: true, order: 0 },
-  beer_name: { visible: true, order: 1 },
-  style: { visible: true, order: 2 },
-  abv: { visible: true, order: 3 },
-  ibu: { visible: true, order: 4 },
-  price: { visible: true, order: 5 },
-  currency: { visible: true, order: 6 },
-  volume: { visible: true, order: 7 },
-  format_type: { visible: true, order: 8 },
-  stock: { visible: true, order: 9 },
-  description: { visible: true, order: 10 },
-};
+export function useColumnSettings(defaultColumns) {
+  const [columns, setColumns] = useLocalStorage('tableColumns', defaultColumns);
+  const [visibleColumns, setVisibleColumns] = useLocalStorage(
+    'visibleColumns',
+    defaultColumns.map(col => col.key)
+  );
 
-export function useColumnSettings(storageKey = 'table_columns') {
-  const [columns, setColumns] = useLocalStorage(storageKey, defaultColumns);
+  const toggleColumnVisibility = useCallback((columnKey) => {
+    setVisibleColumns(prev => {
+      if (prev.includes(columnKey)) {
+        return prev.filter(key => key !== columnKey);
+      } else {
+        return [...prev, columnKey];
+      }
+    });
+  }, [setVisibleColumns]);
 
-  const toggleColumn = (columnKey) => {
-    setColumns(prev => ({
-      ...prev,
-      [columnKey]: {
-        ...prev[columnKey],
-        visible: !prev[columnKey]?.visible,
-      },
-    }));
-  };
-
-  const reorderColumns = (fromIndex, toIndex) => {
-    const columnKeys = Object.keys(columns).sort(
-      (a, b) => columns[a].order - columns[b].order
-    );
-    
-    const [removed] = columnKeys.splice(fromIndex, 1);
-    columnKeys.splice(toIndex, 0, removed);
-
+  const reorderColumns = useCallback((fromIndex, toIndex) => {
     setColumns(prev => {
-      const newColumns = { ...prev };
-      columnKeys.forEach((key, index) => {
-        newColumns[key] = {
-          ...newColumns[key],
-          order: index,
-        };
-      });
+      const newColumns = [...prev];
+      const [removed] = newColumns.splice(fromIndex, 1);
+      newColumns.splice(toIndex, 0, removed);
       return newColumns;
     });
-  };
+  }, [setColumns]);
 
-  const resetColumns = () => {
+  const resetColumns = useCallback(() => {
     setColumns(defaultColumns);
-  };
+    setVisibleColumns(defaultColumns.map(col => col.key));
+  }, [defaultColumns, setColumns, setVisibleColumns]);
 
-  const visibleColumns = Object.keys(columns)
-    .filter(key => columns[key].visible)
-    .sort((a, b) => columns[a].order - columns[b].order);
+  const getVisibleColumns = useCallback(() => {
+    return columns.filter(col => visibleColumns.includes(col.key));
+  }, [columns, visibleColumns]);
 
   return {
     columns,
     visibleColumns,
-    toggleColumn,
+    toggleColumnVisibility,
     reorderColumns,
     resetColumns,
+    getVisibleColumns,
   };
 }
-

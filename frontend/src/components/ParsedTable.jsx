@@ -14,14 +14,18 @@ import { useColumnSettings } from '../hooks/useColumnSettings';
 import { retry, handleApiError } from '../utils/errorHandler';
 import { columnConfig, getColumnLabel, isColumnSortable } from '../utils/columnConfig';
 import { getSettings, saveSettings } from '../utils/settings';
-import SearchInput from './SearchInput';
+import { SearchInput } from './SearchInput';
 import AdvancedSearch from './AdvancedSearch';
 import ExportButton from './ExportButton';
 import BulkActions from './BulkActions';
 import ContextMenu from './ContextMenu';
-import ColumnSettings from './ColumnSettings';
-import SortableHeader from './SortableHeader';
+import { ColumnSettings } from './ColumnSettings';
+import { SortableHeader } from './SortableHeader';
+import { Pagination } from './Pagination';
+import { SavedFilters } from './SavedFilters';
+import { useTableGrouping, GroupedTableRow } from './TableGrouping';
 import './ParsedTable.css';
+import './ResponsiveTable.css';
 
 const ParsedTable = memo(function ParsedTable({
   fileId,
@@ -55,12 +59,29 @@ const ParsedTable = memo(function ParsedTable({
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [advancedSearchParams, setAdvancedSearchParams] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [groupBy, setGroupBy] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
   
   // Сортировка таблицы
   const { sortedData, sortConfig, handleSort } = useTableSort(items);
   
   // Настройки колонок
-  const { visibleColumns } = useColumnSettings();
+  const defaultColumns = [
+    { key: 'brewery', label: 'Пивоварня' },
+    { key: 'beer_name', label: 'Название' },
+    { key: 'style', label: 'Стиль' },
+    { key: 'abv', label: 'ABV' },
+    { key: 'ibu', label: 'IBU' },
+    { key: 'price', label: 'Цена' },
+    { key: 'currency', label: 'Валюта' },
+    { key: 'volume', label: 'Объем' },
+    { key: 'format_type', label: 'Формат' },
+    { key: 'stock', label: 'Остаток' },
+    { key: 'description', label: 'Описание' },
+  ];
+  const { columns, visibleColumns, toggleColumnVisibility, reorderColumns, resetColumns, getVisibleColumns } = useColumnSettings(defaultColumns);
   
   // Сохраняем фильтры при изменении
   useEffect(() => {
@@ -68,7 +89,23 @@ const ParsedTable = memo(function ParsedTable({
   }, [activeFilters, setSavedFilters]);
   
   // Используем отсортированные данные
-  const displayItems = sortedData;
+  const sortedItems = sortedData;
+  
+  // Группировка (если включена)
+  const { groups, ungrouped } = useTableGrouping(sortedItems, groupBy);
+  
+  // Пагинация (только для негруппированных элементов)
+  // При группировке показываем все группы, но пагинируем только ungrouped элементы
+  const itemsToPaginate = groupBy ? ungrouped : sortedItems;
+  const totalPages = groupBy ? 1 : Math.ceil(itemsToPaginate.length / itemsPerPage);
+  const startIndex = groupBy ? 0 : (currentPage - 1) * itemsPerPage;
+  const endIndex = groupBy ? ungrouped.length : startIndex + itemsPerPage;
+  const displayItems = groupBy ? ungrouped : itemsToPaginate.slice(startIndex, endIndex);
+  
+  // Сбрасываем страницу при изменении фильтров или данных
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFilters, sortedItems.length]);
   
   // Генерируем предложения для автодополнения из текущих данных
   const searchSuggestions = useMemo(() => {
@@ -119,38 +156,29 @@ const ParsedTable = memo(function ParsedTable({
   }, [debouncedTempFilters]);
 
   // Клавиатурные сокращения
-  useKeyboardShortcuts([
-    {
-      keys: 'ctrl+f',
-      handler: () => {
-        // Фокус на поиск
-        const searchInput = document.querySelector('.search-input');
-        if (searchInput) searchInput.focus();
-      },
+  useKeyboardShortcuts({
+    'ctrl+f': () => {
+      // Фокус на поиск
+      const searchInput = document.querySelector('.search-input');
+      if (searchInput) searchInput.focus();
     },
-    {
-      keys: 'ctrl+s',
-      handler: () => {
-        // Сохранить текущее редактирование
-        if (editingId) {
-          handleSave(editingId);
-        }
-      },
+    'ctrl+s': () => {
+      // Сохранить текущее редактирование
+      if (editingId) {
+        handleSave(editingId);
+      }
     },
-    {
-      keys: 'escape',
-      handler: () => {
-        // Отменить редактирование
-        if (editingId) {
-          handleCancel();
-        }
-        // Закрыть контекстное меню
-        if (contextMenu.show) {
-          setContextMenu({ show: false, x: 0, y: 0, item: null });
-        }
-      },
+    'escape': () => {
+      // Отменить редактирование
+      if (editingId) {
+        handleCancel();
+      }
+      // Закрыть контекстное меню
+      if (contextMenu.show) {
+        setContextMenu({ show: false, x: 0, y: 0, item: null });
+      }
     },
-  ]);
+  });
 
 
   const loadItems = useCallback(async () => {
@@ -194,6 +222,12 @@ const ParsedTable = memo(function ParsedTable({
     setActiveFilters({ ...tempFilters });
     toast.success('Фильтры применены');
   }, [tempFilters]);
+
+  const handleApplySavedFilter = useCallback((savedFilterValues) => {
+    setTempFilters(savedFilterValues);
+    setActiveFilters(savedFilterValues);
+    toast.success('Сохраненный фильтр применен');
+  }, []);
 
   const handleClearFilters = useCallback(() => {
     const clearedFilters = {
@@ -252,11 +286,188 @@ const ParsedTable = memo(function ParsedTable({
     setEditData({});
   };
 
-  const handleCheckboxChange = (itemId, checked) => {
+  const handleCheckboxChange = useCallback((itemId, checked) => {
     if (onItemSelect) {
       onItemSelect(itemId, checked);
     }
-  };
+  }, [onItemSelect]);
+
+  // Функция рендеринга строки таблицы (используется в обычном режиме и в группировке)
+  const renderTableRow = useCallback((item, index = 0) => (
+    <motion.tr
+      key={item.id}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: index * 0.02 }}
+      className={editingId === item.id ? 'editing' : selectedItems.includes(item.id) ? 'selected' : ''}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setContextMenu({
+          show: true,
+          x: e.clientX,
+          y: e.clientY,
+          item: item,
+        });
+      }}
+    >
+      <td>
+        <input
+          type="checkbox"
+          checked={selectedItems.includes(item.id)}
+          onChange={(e) => handleCheckboxChange(item.id, e.target.checked)}
+          aria-label={`Выбрать позицию ${item.beer_name || item.id}`}
+        />
+      </td>
+      {editingId === item.id ? (
+        <>
+          <td className="editing-cell">
+            <input
+              type="text"
+              value={editData.brewery}
+              onChange={(e) => setEditData({ ...editData, brewery: e.target.value })}
+              className="input input-small"
+              autoFocus
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.beer_name}
+              onChange={(e) => setEditData({ ...editData, beer_name: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.style}
+              onChange={(e) => setEditData({ ...editData, style: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="number"
+              step="0.1"
+              value={editData.abv}
+              onChange={(e) => setEditData({ ...editData, abv: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.ibu}
+              onChange={(e) => setEditData({ ...editData, ibu: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="number"
+              step="0.01"
+              value={editData.price}
+              onChange={(e) => setEditData({ ...editData, price: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.currency}
+              onChange={(e) => setEditData({ ...editData, currency: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="number"
+              step="0.01"
+              value={editData.volume}
+              onChange={(e) => setEditData({ ...editData, volume: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.format_type}
+              onChange={(e) => setEditData({ ...editData, format_type: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <input
+              type="text"
+              value={editData.stock}
+              onChange={(e) => setEditData({ ...editData, stock: e.target.value })}
+              className="input input-small"
+            />
+          </td>
+          <td>
+            <textarea
+              value={editData.description}
+              onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+              className="input"
+              rows="3"
+              style={{minWidth: '200px'}}
+            />
+          </td>
+          <td>
+            <button
+              className="button button-success"
+              onClick={() => handleSave(item.id)}
+            >
+              Сохранить
+            </button>
+            <button
+              className="button button-danger"
+              onClick={handleCancel}
+            >
+              Отмена
+            </button>
+          </td>
+        </>
+      ) : (
+        <>
+          {getVisibleColumns().map(column => {
+            const key = column.key;
+            let value = item[key];
+            
+            if (key === 'abv' && value != null) {
+              value = typeof value === 'number' ? value.toFixed(1) : value;
+            } else if (key === 'price' && value != null) {
+              value = typeof value === 'number' ? value.toFixed(2) : value;
+            } else if (key === 'volume' && value != null) {
+              value = typeof value === 'number' ? value.toFixed(2) : value;
+            } else if (key === 'description') {
+              return (
+                <td key={key} className="description-cell">
+                  {value ? (
+                    <div className="description-text" title={value}>
+                      {value.length > 100 
+                        ? `${value.substring(0, 100)}...` 
+                        : value}
+                    </div>
+                  ) : '-'}
+                </td>
+              );
+            }
+            
+            return <td key={key}>{value || '-'}</td>;
+          })}
+          <td>
+            <button
+              className="button button-primary"
+              onClick={() => handleEdit(item)}
+            >
+              Редактировать
+            </button>
+          </td>
+        </>
+      )}
+    </motion.tr>
+  ), [editingId, editData, selectedItems, handleCheckboxChange, handleEdit, handleSave, handleCancel, getVisibleColumns, setEditData, setContextMenu]);
 
   const handleSelectAllChange = (e) => {
     if (e.target.checked) {
@@ -313,8 +524,12 @@ const ParsedTable = memo(function ParsedTable({
           </div>
         )}
 
-        {selectedSheet && (
+            {selectedSheet && (
           <>
+            <SavedFilters
+              currentFilters={activeFilters}
+              onApplyFilter={handleApplySavedFilter}
+            />
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -324,7 +539,8 @@ const ParsedTable = memo(function ParsedTable({
                 <div className="search-input-wrapper">
                   <SearchInput
                     placeholder="Быстрый поиск по всем полям..."
-                    onSearch={(query) => {
+                    value={searchQuery}
+                    onChange={(query) => {
                       setSearchQuery(query);
                       // Автоматически применяем поиск к фильтрам
                       if (query) {
@@ -450,6 +666,22 @@ const ParsedTable = memo(function ParsedTable({
                 </span>
               </div>
               <div className="table-actions-right">
+                <select
+                  value={groupBy || ''}
+                  onChange={(e) => {
+                    setGroupBy(e.target.value || null);
+                    setCurrentPage(1);
+                    setExpandedGroups(new Set());
+                  }}
+                  className="input"
+                  style={{ minWidth: '150px' }}
+                  title="Группировать по"
+                >
+                  <option value="">Без группировки</option>
+                  <option value="brewery">По пивоварне</option>
+                  <option value="style">По стилю</option>
+                  <option value="format_type">По формату</option>
+                </select>
                 <button
                   className="button button-secondary"
                   onClick={() => setShowColumnSettings(!showColumnSettings)}
@@ -466,13 +698,13 @@ const ParsedTable = memo(function ParsedTable({
             </div>
 
             {showColumnSettings && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="column-settings-wrapper"
-              >
-                <ColumnSettings />
-              </motion.div>
+              <ColumnSettings
+                columns={columns}
+                visibleColumns={visibleColumns}
+                onToggleVisibility={toggleColumnVisibility}
+                onReorder={reorderColumns}
+                onReset={resetColumns}
+              />
             )}
 
             <div className="table-container">
@@ -480,203 +712,85 @@ const ParsedTable = memo(function ParsedTable({
                 <thead>
                   <tr>
                     <th></th>
-                    {visibleColumns.map(columnKey => {
-                      const config = columnConfig[columnKey];
+                    {getVisibleColumns().map(column => {
+                      const config = columnConfig[column.key];
                       if (!config) return null;
                       
-                      return isColumnSortable(columnKey) ? (
+                      return isColumnSortable(column.key) ? (
                         <SortableHeader
-                          key={columnKey}
-                          columnKey={columnKey}
-                          label={config.label}
+                          key={column.key}
+                          column={column}
                           sortConfig={sortConfig}
                           onSort={handleSort}
-                        />
+                        >
+                          {config.label}
+                        </SortableHeader>
                       ) : (
-                        <th key={columnKey}>{config.label}</th>
+                        <th key={column.key}>{config.label}</th>
                       );
                     })}
                     <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {displayItems.length === 0 ? (
+                  {displayItems.length === 0 && (!groupBy || groups.length === 0) ? (
                     <tr>
-                      <td colSpan={visibleColumns.length + 3} className="empty">Нет данных</td>
+                      <td colSpan={getVisibleColumns().length + 3} className="empty">Нет данных</td>
                     </tr>
-                  ) : (
-                    displayItems.map((item, index) => (
-                      <motion.tr
-                        key={item.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: index * 0.02 }}
-                        className={editingId === item.id ? 'editing' : selectedItems.includes(item.id) ? 'selected' : ''}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setContextMenu({
-                            show: true,
-                            x: e.clientX,
-                            y: e.clientY,
-                            item: item,
-                          });
-                        }}
-                      >
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={selectedItems.includes(item.id)}
-                            onChange={(e) => handleCheckboxChange(item.id, e.target.checked)}
-                            aria-label={`Выбрать позицию ${item.beer_name || item.id}`}
+                  ) : groupBy && groups.length > 0 ? (
+                    <>
+                      {groups.map((group) => {
+                        const isExpanded = expandedGroups.has(group.key);
+                        return (
+                          <GroupedTableRow
+                            key={group.key}
+                            group={group}
+                            isExpanded={isExpanded}
+                            onToggle={() => {
+                              setExpandedGroups(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(group.key)) {
+                                  newSet.delete(group.key);
+                                } else {
+                                  newSet.add(group.key);
+                                }
+                                return newSet;
+                              });
+                            }}
+                            renderRow={(item, index) => renderTableRow(item, index)}
                           />
-                        </td>
-                        {editingId === item.id ? (
-                          <>
-                            <td className="editing-cell">
-                              <input
-                                type="text"
-                                value={editData.brewery}
-                                onChange={(e) => setEditData({ ...editData, brewery: e.target.value })}
-                                className="input input-small"
-                                autoFocus
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.beer_name}
-                                onChange={(e) => setEditData({ ...editData, beer_name: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.style}
-                                onChange={(e) => setEditData({ ...editData, style: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editData.abv}
-                                onChange={(e) => setEditData({ ...editData, abv: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.ibu}
-                                onChange={(e) => setEditData({ ...editData, ibu: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={editData.price}
-                                onChange={(e) => setEditData({ ...editData, price: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.currency}
-                                onChange={(e) => setEditData({ ...editData, currency: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={editData.volume}
-                                onChange={(e) => setEditData({ ...editData, volume: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.format_type}
-                                onChange={(e) => setEditData({ ...editData, format_type: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={editData.stock}
-                                onChange={(e) => setEditData({ ...editData, stock: e.target.value })}
-                                className="input input-small"
-                              />
-                            </td>
-                            <td>
-                              <textarea
-                                value={editData.description}
-                                onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                                className="input"
-                                rows="3"
-                                style={{minWidth: '200px'}}
-                              />
-                            </td>
-                            <td>
-                              <button
-                                className="button button-success"
-                                onClick={() => handleSave(item.id)}
-                              >
-                                Сохранить
-                              </button>
-                              <button
-                                className="button button-danger"
-                                onClick={handleCancel}
-                              >
-                                Отмена
-                              </button>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td>{item.brewery || '-'}</td>
-                            <td>{item.beer_name || '-'}</td>
-                            <td>{item.style || '-'}</td>
-                            <td>{item.abv ? (typeof item.abv === 'number' ? item.abv.toFixed(1) : item.abv) : '-'}</td>
-                            <td>{item.ibu || '-'}</td>
-                            <td>{item.price ? (typeof item.price === 'number' ? item.price.toFixed(2) : item.price) : '-'}</td>
-                            <td>{item.currency || 'RUB'}</td>
-                            <td>{item.volume ? (typeof item.volume === 'number' ? item.volume.toFixed(2) : item.volume) : '-'}</td>
-                            <td>{item.format_type || '-'}</td>
-                            <td>{item.stock || '-'}</td>
-                            <td className="description-cell">
-                              {item.description ? (
-                                <div className="description-text" title={item.description}>
-                                  {item.description.length > 100 
-                                    ? `${item.description.substring(0, 100)}...` 
-                                    : item.description}
-                                </div>
-                              ) : '-'}
-                            </td>
-                            <td>
-                              <button
-                                className="button button-primary"
-                                onClick={() => handleEdit(item)}
-                              >
-                                Редактировать
-                              </button>
-                            </td>
-                          </>
-                        )}
-                      </motion.tr>
-                    ))
+                        );
+                      })}
+                      {ungrouped.length > 0 && (
+                        <>
+                          {ungrouped.map((item, index) => renderTableRow(item, index))}
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    displayItems.map((item, index) => renderTableRow(item, index))
                   )}
                 </tbody>
               </table>
             </div>
+            
+            {sortedItems.length > 0 && !groupBy && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={(newItemsPerPage) => {
+                  setItemsPerPage(newItemsPerPage);
+                  setCurrentPage(1);
+                }}
+              />
+            )}
+            {groupBy && groups.length > 0 && (
+              <div className="grouping-info">
+                <span>Группировка активна: {groups.length} групп, {ungrouped.length} позиций без группы</span>
+              </div>
+            )}
           </>
         )}
 

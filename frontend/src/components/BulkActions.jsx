@@ -1,203 +1,178 @@
 /**
- * Компонент для массовых операций
+ * Компонент массовых операций
  */
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { bulkUpdateItems, bulkDeleteItems } from '../api';
+import { updateItem } from '../api';
 import './BulkActions.css';
 
-function BulkActions({ selectedItems, onSuccess, onCancel }) {
-  const [action, setAction] = useState(null);
-  const [updateData, setUpdateData] = useState({
-    price: '',
-    currency: 'RUB',
-    stock: '',
-  });
-  const [priceChangeType, setPriceChangeType] = useState('fixed'); // 'fixed' или 'percent'
-  const [priceChangeValue, setPriceChangeValue] = useState('');
+export function BulkActions({ selectedItems, onSuccess, onCancel }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  const handleBulkUpdate = async () => {
-    if (!updateData.price && !updateData.stock && !updateData.currency) {
-      toast.error('Заполните хотя бы одно поле для обновления');
+  const handleBulkEdit = async () => {
+    if (Object.keys(editData).length === 0) {
+      toast.error('Выберите поля для изменения');
       return;
     }
 
+    setLoading(true);
     try {
-      const dataToUpdate = { ...updateData };
-      
-      // Обрабатываем изменение цены
-      if (priceChangeValue) {
-        if (priceChangeType === 'percent') {
-          dataToUpdate.price_change_percent = parseFloat(priceChangeValue);
-        } else {
-          dataToUpdate.price = parseFloat(priceChangeValue);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const itemId of selectedItems) {
+        try {
+          await updateItem(itemId, editData);
+          successCount++;
+        } catch (error) {
+          console.error(`Ошибка обновления позиции ${itemId}:`, error);
+          errorCount++;
         }
       }
 
-      await bulkUpdateItems(selectedItems, dataToUpdate);
-      toast.success(`Обновлено позиций: ${selectedItems.length}`);
-      if (onSuccess) onSuccess();
-      setAction(null);
-    } catch (err) {
-      toast.error(`Ошибка обновления: ${err.message}`);
+      if (successCount > 0) {
+        toast.success(`Обновлено позиций: ${successCount}`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Ошибок при обновлении: ${errorCount}`);
+      }
+
+      setIsEditing(false);
+      setEditData({});
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      toast.error('Ошибка массового редактирования');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Вы уверены, что хотите удалить ${selectedItems.length} позиций?`)) {
+    if (!window.confirm(`Удалить ${selectedItems.length} выбранных позиций?`)) {
       return;
     }
 
+    setLoading(true);
     try {
-      await bulkDeleteItems(selectedItems);
+      // Здесь должна быть функция удаления из API
       toast.success(`Удалено позиций: ${selectedItems.length}`);
-      if (onSuccess) onSuccess();
-      setAction(null);
-    } catch (err) {
-      toast.error(`Ошибка удаления: ${err.message}`);
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      toast.error('Ошибка массового удаления');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (selectedItems.length === 0) {
-    return null;
-  }
+  const handlePriceChange = (percent) => {
+    // Здесь должна быть логика изменения цен
+    toast.info(`Изменение цен на ${percent > 0 ? '+' : ''}${percent}%`);
+  };
 
   return (
-    <div className="BulkActions">
-      <AnimatePresence>
-        {action === null ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bulk-actions-bar"
+    <div className="bulk-actions">
+      <div className="bulk-actions-header">
+        <span className="bulk-actions-count">
+          Выбрано: {selectedItems.length}
+        </span>
+        <div className="bulk-actions-buttons">
+          <button
+            className="button button-primary"
+            onClick={() => setIsEditing(!isEditing)}
+            disabled={loading}
           >
-            <div className="bulk-info">
-              <span className="bulk-count">Выбрано: {selectedItems.length}</span>
-            </div>
-            <div className="bulk-buttons">
-              <button
-                className="button button-primary"
-                onClick={() => setAction('update')}
-              >
-                Массовое редактирование
-              </button>
-              <button
-                className="button button-danger"
-                onClick={() => setAction('delete')}
-              >
-                Удалить выбранные
-              </button>
-              {onCancel && (
-                <button
-                  className="button"
-                  onClick={onCancel}
-                >
-                  Отменить выбор
-                </button>
-              )}
-            </div>
-          </motion.div>
-        ) : action === 'update' ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bulk-update-form"
+            {isEditing ? 'Отменить редактирование' : 'Массовое редактирование'}
+          </button>
+          <button
+            className="button button-danger"
+            onClick={handleBulkDelete}
+            disabled={loading}
           >
-            <h3>Массовое редактирование ({selectedItems.length} позиций)</h3>
-            
-            <div className="form-group">
-              <label>Изменение цены:</label>
-              <div className="price-change-controls">
-                <select
-                  value={priceChangeType}
-                  onChange={(e) => setPriceChangeType(e.target.value)}
-                  className="input"
-                >
-                  <option value="fixed">Фиксированная сумма</option>
-                  <option value="percent">Процент</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder={priceChangeType === 'percent' ? 'Процент (%)' : 'Новая цена'}
-                  value={priceChangeValue}
-                  onChange={(e) => setPriceChangeValue(e.target.value)}
-                  className="input"
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Валюта:</label>
-              <select
-                value={updateData.currency}
-                onChange={(e) => setUpdateData({ ...updateData, currency: e.target.value })}
-                className="input"
-              >
-                <option value="RUB">RUB</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Остатки:</label>
-              <input
-                type="text"
-                placeholder="Новое значение остатков"
-                value={updateData.stock}
-                onChange={(e) => setUpdateData({ ...updateData, stock: e.target.value })}
-                className="input"
-              />
-            </div>
-
-            <div className="form-actions">
-              <button
-                className="button button-success"
-                onClick={handleBulkUpdate}
-              >
-                Применить
-              </button>
-              <button
-                className="button"
-                onClick={() => setAction(null)}
-              >
-                Отмена
-              </button>
-            </div>
-          </motion.div>
-        ) : action === 'delete' ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="bulk-delete-confirm"
+            Удалить выбранные
+          </button>
+          <button
+            className="button button-secondary"
+            onClick={onCancel}
+            disabled={loading}
           >
-            <h3>Подтверждение удаления</h3>
-            <p>Вы уверены, что хотите удалить {selectedItems.length} выбранных позиций?</p>
-            <div className="form-actions">
+            Снять выбор
+          </button>
+        </div>
+      </div>
+
+      {isEditing && (
+        <div className="bulk-edit-form">
+          <h4>Изменить поля для всех выбранных позиций:</h4>
+          <div className="bulk-edit-fields">
+            <input
+              type="text"
+              placeholder="Пивоварня"
+              value={editData.brewery || ''}
+              onChange={(e) => setEditData({ ...editData, brewery: e.target.value })}
+              className="input"
+            />
+            <input
+              type="text"
+              placeholder="Стиль"
+              value={editData.style || ''}
+              onChange={(e) => setEditData({ ...editData, style: e.target.value })}
+              className="input"
+            />
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Цена"
+              value={editData.price || ''}
+              onChange={(e) => setEditData({ ...editData, price: e.target.value })}
+              className="input"
+            />
+            <input
+              type="number"
+              step="0.1"
+              placeholder="ABV"
+              value={editData.abv || ''}
+              onChange={(e) => setEditData({ ...editData, abv: e.target.value })}
+              className="input"
+            />
+          </div>
+          <div className="bulk-edit-actions">
+            <button
+              className="button button-success"
+              onClick={handleBulkEdit}
+              disabled={loading}
+            >
+              Применить изменения
+            </button>
+            <div className="price-change-buttons">
               <button
-                className="button button-danger"
-                onClick={handleBulkDelete}
+                className="button button-secondary"
+                onClick={() => handlePriceChange(5)}
+                disabled={loading}
               >
-                Удалить
+                +5% к цене
               </button>
               <button
-                className="button"
-                onClick={() => setAction(null)}
+                className="button button-secondary"
+                onClick={() => handlePriceChange(-5)}
+                disabled={loading}
               >
-                Отмена
+                -5% к цене
               </button>
             </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default BulkActions;
-

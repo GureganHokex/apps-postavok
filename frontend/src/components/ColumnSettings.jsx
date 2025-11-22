@@ -1,92 +1,77 @@
 /**
- * Компонент настроек колонок
+ * Компонент настроек колонок таблицы
  */
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useColumnSettings } from '../hooks/useColumnSettings';
+import React, { useState } from 'react';
 import './ColumnSettings.css';
 
-const columnLabels = {
-  brewery: 'Пивоварня',
-  beer_name: 'Название',
-  style: 'Стиль',
-  abv: 'Крепость',
-  ibu: 'IBU',
-  price: 'Цена',
-  currency: 'Валюта',
-  volume: 'Объём',
-  format_type: 'Формат',
-  stock: 'Остатки',
-  description: 'Описание',
-};
+export function ColumnSettings({ columns, visibleColumns, onToggleVisibility, onReorder, onReset }) {
+  const [isOpen, setIsOpen] = useState(false);
 
-function ColumnSettings() {
-  const { columns, visibleColumns, toggleColumn, reorderColumns, resetColumns } = useColumnSettings();
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', index);
+  };
 
-  const allColumns = Object.keys(columns).sort(
-    (a, b) => columns[a].order - columns[b].order
-  );
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+    if (dragIndex !== dropIndex && onReorder) {
+      onReorder(dragIndex, dropIndex);
+    }
+  };
 
   return (
-    <div className="ColumnSettings">
-      <div className="column-settings-header">
-        <h3>Настройка колонок</h3>
+    <>
+      <div className="column-settings">
         <button
-          className="button button-sm"
-          onClick={resetColumns}
+          className="column-settings-toggle"
+          onClick={() => setIsOpen(!isOpen)}
+          title="Настройки колонок"
         >
-          Сбросить
+          ⚙️
         </button>
       </div>
-
-      <div className="column-list">
-        {allColumns.map((columnKey, index) => (
-          <motion.div
-            key={columnKey}
-            className={`column-item ${columns[columnKey].visible ? 'visible' : ''}`}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.05 }}
-          >
-            <label className="column-checkbox">
-              <input
-                type="checkbox"
-                checked={columns[columnKey].visible}
-                onChange={() => toggleColumn(columnKey)}
-              />
-              <span>{columnLabels[columnKey] || columnKey}</span>
-            </label>
-            <div className="column-order">
-              {index > 0 && (
-                <button
-                  className="order-btn"
-                  onClick={() => reorderColumns(index, index - 1)}
-                  title="Переместить вверх"
-                >
-                  ↑
-                </button>
-              )}
-              {index < allColumns.length - 1 && (
-                <button
-                  className="order-btn"
-                  onClick={() => reorderColumns(index, index + 1)}
-                  title="Переместить вниз"
-                >
-                  ↓
-                </button>
-              )}
+      {isOpen && (
+        <>
+          <div className="column-settings-overlay" onClick={() => setIsOpen(false)} />
+          <div className="column-settings-panel">
+            <div className="panel-header">
+              <h3>Настройки колонок</h3>
+              <button onClick={() => setIsOpen(false)}>✕</button>
             </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="column-info">
-        Видимых колонок: {visibleColumns.length} из {allColumns.length}
-      </div>
-    </div>
+            <div className="panel-content">
+              <div className="columns-list">
+                {columns.map((col, index) => (
+                  <div
+                    key={col.key}
+                    className="column-item"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, index)}
+                  >
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col.key)}
+                        onChange={() => onToggleVisibility(col.key)}
+                      />
+                      <span>{col.label || col.key}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div className="panel-actions">
+                <button onClick={onReset}>Сбросить</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }
-
-export default ColumnSettings;
-

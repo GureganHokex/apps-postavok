@@ -2054,7 +2054,7 @@ class ExcelParser(BaseParser):
                 # Если хотя бы beer_name пустой - тоже пропускаем (даже если есть другие поля)
                 if is_empty_beer_name:
                     logger.debug(f"Пропущена строка с brewery '{brewery_val_original}' - содержит город и нет beer_name")
-                    return None
+                return None
         
         # Строгая проверка валидности записи
         # Запись считается валидной, если:
@@ -2085,7 +2085,7 @@ class ExcelParser(BaseParser):
                 # Если после нормализации brewery стал пустым, все равно добавляем исходное значение
                 # но логируем это для отладки
                 logger.debug(f"Brewery стал пустым после нормализации: '{brewery_val}'")
-                filled_fields.append('brewery')
+            filled_fields.append('brewery')
         if price_val and not is_empty_value(price_val):
             filled_fields.append('price')
         if style_val and not is_empty_value(style_val):

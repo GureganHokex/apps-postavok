@@ -1,5 +1,5 @@
 /**
- * Хук для клавиатурных сокращений
+ * Хук для глобальных горячих клавиш
  */
 
 import { useEffect } from 'react';
@@ -7,37 +7,24 @@ import { useEffect } from 'react';
 export function useKeyboardShortcuts(shortcuts) {
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Проверяем, не находится ли фокус в input/textarea
-      if (
-        event.target.tagName === 'INPUT' ||
-        event.target.tagName === 'TEXTAREA' ||
-        event.target.isContentEditable
-      ) {
-        // Разрешаем только Ctrl+S для сохранения
-        if (event.ctrlKey && event.key === 's') {
-          event.preventDefault();
-          const saveShortcut = shortcuts.find(s => s.keys === 'ctrl+s');
-          if (saveShortcut) {
-            saveShortcut.handler();
-          }
-        }
-        return;
-      }
+      const key = event.key.toLowerCase();
+      const ctrl = event.ctrlKey || event.metaKey;
+      const shift = event.shiftKey;
+      const alt = event.altKey;
 
-      // Формируем строку комбинации клавиш
-      const keyParts = [];
-      if (event.ctrlKey || event.metaKey) keyParts.push('ctrl');
-      if (event.shiftKey) keyParts.push('shift');
-      if (event.altKey) keyParts.push('alt');
-      keyParts.push(event.key.toLowerCase());
+      // Формируем комбинацию клавиш
+      const combination = [
+        ctrl && 'ctrl',
+        shift && 'shift',
+        alt && 'alt',
+        key
+      ].filter(Boolean).join('+');
 
-      const keyCombo = keyParts.join('+');
-
-      // Ищем подходящий shortcut
-      const shortcut = shortcuts.find(s => s.keys === keyCombo);
-      if (shortcut) {
+      // Ищем подходящий обработчик
+      const handler = shortcuts[combination];
+      if (handler) {
         event.preventDefault();
-        shortcut.handler();
+        handler(event);
       }
     };
 
@@ -47,4 +34,3 @@ export function useKeyboardShortcuts(shortcuts) {
     };
   }, [shortcuts]);
 }
-

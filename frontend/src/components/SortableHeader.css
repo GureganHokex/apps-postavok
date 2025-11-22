@@ -1,38 +1,32 @@
-/**
- * Стили для сортируемых заголовков
- */
-
 .sortable-header {
-  cursor: pointer;
+  cursor: default;
   user-select: none;
   position: relative;
-  transition: var(--transition-fast);
 }
 
-.sortable-header:hover {
-  background-color: var(--bg-tertiary);
+.sortable-header.sortable {
+  cursor: pointer;
 }
 
-.sortable-header.sorted {
-  background-color: var(--bg-secondary);
-  color: var(--primary-color);
+.sortable-header.sortable:hover {
+  background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
 }
 
-.sortable-header .header-content {
+.header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-xs);
+  gap: 0.5rem;
 }
 
-.sortable-header .sort-indicator {
-  font-size: var(--font-sm);
-  color: var(--primary-color);
-  transition: var(--transition-fast);
-  display: inline-block;
+.sort-indicator {
+  font-size: 0.875rem;
+  opacity: 0.5;
+  transition: opacity 0.2s;
 }
 
-.sortable-header:not(.sorted) .sort-indicator {
-  opacity: 0.3;
+.sortable-header.sorted-asc .sort-indicator,
+.sortable-header.sorted-desc .sort-indicator {
+  opacity: 1;
+  color: var(--color-primary, #007bff);
 }
-

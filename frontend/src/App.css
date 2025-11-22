@@ -48,6 +48,8 @@
   border-bottom: 2px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   flex-wrap: wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .App-nav button {

@@ -3,222 +3,79 @@
  */
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import toast from 'react-hot-toast';
 import './AdvancedSearch.css';
 
-function AdvancedSearch({ onSearch, onClose }) {
-  const [searchMode, setSearchMode] = useState('simple'); // 'simple' или 'advanced'
+export function AdvancedSearch({ onSearch, onClose }) {
+  const [field, setField] = useState('all');
   const [query, setQuery] = useState('');
-  const [field, setField] = useState('all'); // 'all', 'brewery', 'beer_name', 'style'
-  const [operator, setOperator] = useState('contains'); // 'contains', 'equals', 'starts', 'ends'
-  const [savedSearches, setSavedSearches] = useState(() => {
-    return JSON.parse(localStorage.getItem('saved_searches') || '[]');
-  });
+  const [operator, setOperator] = useState('contains');
 
-  const handleSearch = () => {
-    if (!query.trim()) {
-      toast.error('Введите поисковый запрос');
-      return;
+  const fields = [
+    { value: 'all', label: 'Все поля' },
+    { value: 'brewery', label: 'Пивоварня' },
+    { value: 'beer_name', label: 'Название' },
+    { value: 'style', label: 'Стиль' },
+    { value: 'description', label: 'Описание' },
+  ];
+
+  const operators = [
+    { value: 'contains', label: 'Содержит' },
+    { value: 'equals', label: 'Равно' },
+    { value: 'starts_with', label: 'Начинается с' },
+    { value: 'ends_with', label: 'Заканчивается на' },
+  ];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (query.trim()) {
+      onSearch({
+        field: field === 'all' ? null : field,
+        query: query.trim(),
+        operator,
+      });
     }
-
-    const searchParams = {
-      mode: searchMode,
-      query: query.trim(),
-      field: field !== 'all' ? field : null,
-      operator,
-    };
-
-    if (onSearch) {
-      onSearch(searchParams);
-    }
-  };
-
-  const handleSaveSearch = () => {
-    if (!query.trim()) {
-      toast.error('Введите поисковый запрос');
-      return;
-    }
-
-    const searchName = prompt('Введите название для сохранения поиска:');
-    if (!searchName) return;
-
-    const savedSearch = {
-      id: Date.now(),
-      name: searchName,
-      mode: searchMode,
-      query,
-      field,
-      operator,
-      created_at: new Date().toISOString(),
-    };
-
-    const updated = [...savedSearches, savedSearch];
-    setSavedSearches(updated);
-    localStorage.setItem('saved_searches', JSON.stringify(updated));
-    toast.success('Поиск сохранен');
-  };
-
-  const handleLoadSearch = (savedSearch) => {
-    setQuery(savedSearch.query);
-    setField(savedSearch.field || 'all');
-    setOperator(savedSearch.operator || 'contains');
-    setSearchMode(savedSearch.mode || 'simple');
-    toast.success(`Поиск "${savedSearch.name}" загружен`);
-  };
-
-  const handleDeleteSearch = (searchId) => {
-    const updated = savedSearches.filter(s => s.id !== searchId);
-    setSavedSearches(updated);
-    localStorage.setItem('saved_searches', JSON.stringify(updated));
-    toast.success('Поиск удален');
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="AdvancedSearch"
-    >
-      <div className="search-header">
+    <div className="advanced-search">
+      <div className="advanced-search-header">
         <h3>Расширенный поиск</h3>
-        {onClose && (
-          <button
-            className="close-btn"
-            onClick={onClose}
-            aria-label="Закрыть"
-          >
-            ✕
-          </button>
-        )}
+        <button onClick={onClose} className="close-button">✕</button>
       </div>
-
-      <div className="search-mode-toggle">
-        <button
-          className={`mode-btn ${searchMode === 'simple' ? 'active' : ''}`}
-          onClick={() => setSearchMode('simple')}
-        >
-          Простой поиск
-        </button>
-        <button
-          className={`mode-btn ${searchMode === 'advanced' ? 'active' : ''}`}
-          onClick={() => setSearchMode('advanced')}
-        >
-          Расширенный поиск
-        </button>
-      </div>
-
-      {searchMode === 'simple' ? (
-        <div className="simple-search">
+      <form onSubmit={handleSubmit} className="advanced-search-form">
+        <div className="form-group">
+          <label>Поле:</label>
+          <select value={field} onChange={(e) => setField(e.target.value)}>
+            {fields.map(f => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Оператор:</label>
+          <select value={operator} onChange={(e) => setOperator(e.target.value)}>
+            {operators.map(op => (
+              <option key={op.value} value={op.value}>{op.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Запрос:</label>
           <input
             type="text"
-            placeholder="Введите поисковый запрос..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            className="input"
+            placeholder="Введите текст для поиска..."
             autoFocus
           />
-          <div className="search-actions">
-            <button
-              className="button button-primary"
-              onClick={handleSearch}
-            >
-              Найти
-            </button>
-            <button
-              className="button button-secondary"
-              onClick={handleSaveSearch}
-            >
-              Сохранить поиск
-            </button>
-          </div>
         </div>
-      ) : (
-        <div className="advanced-search">
-          <div className="search-field-group">
-            <label>Поле поиска:</label>
-            <select
-              value={field}
-              onChange={(e) => setField(e.target.value)}
-              className="input"
-            >
-              <option value="all">Все поля</option>
-              <option value="brewery">Пивоварня</option>
-              <option value="beer_name">Название</option>
-              <option value="style">Стиль</option>
-              <option value="description">Описание</option>
-            </select>
-          </div>
-
-          <div className="search-field-group">
-            <label>Оператор:</label>
-            <select
-              value={operator}
-              onChange={(e) => setOperator(e.target.value)}
-              className="input"
-            >
-              <option value="contains">Содержит</option>
-              <option value="equals">Равно</option>
-              <option value="starts">Начинается с</option>
-              <option value="ends">Заканчивается на</option>
-            </select>
-          </div>
-
-          <div className="search-field-group">
-            <label>Запрос:</label>
-            <input
-              type="text"
-              placeholder="Введите поисковый запрос..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              className="input"
-            />
-          </div>
-
-          <div className="search-actions">
-            <button
-              className="button button-primary"
-              onClick={handleSearch}
-            >
-              Найти
-            </button>
-            <button
-              className="button button-secondary"
-              onClick={handleSaveSearch}
-            >
-              Сохранить поиск
-            </button>
-          </div>
+        <div className="form-actions">
+          <button type="submit" className="button button-primary">Найти</button>
+          <button type="button" onClick={onClose} className="button button-secondary">Отмена</button>
         </div>
-      )}
-
-      {savedSearches.length > 0 && (
-        <div className="saved-searches">
-          <h4>Сохраненные поиски:</h4>
-          <div className="saved-searches-list">
-            {savedSearches.map((savedSearch) => (
-              <div key={savedSearch.id} className="saved-search-item">
-                <span className="search-name" onClick={() => handleLoadSearch(savedSearch)}>
-                  {savedSearch.name}
-                </span>
-                <button
-                  className="delete-btn"
-                  onClick={() => handleDeleteSearch(savedSearch.id)}
-                  title="Удалить"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </motion.div>
+      </form>
+    </div>
   );
 }
 
 export default AdvancedSearch;
-

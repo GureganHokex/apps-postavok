@@ -1,0 +1,150 @@
+/**
+ * Стили для расширенного поиска
+ */
+
+.AdvancedSearch {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.AdvancedSearch .search-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.AdvancedSearch .search-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.AdvancedSearch .close-btn {
+  background: none;
+  border: none;
+  font-size: var(--font-xl);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.AdvancedSearch .close-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.AdvancedSearch .search-mode-toggle {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.AdvancedSearch .mode-btn {
+  flex: 1;
+  padding: var(--spacing-md);
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.AdvancedSearch .mode-btn:hover {
+  border-color: var(--primary-color);
+}
+
+.AdvancedSearch .mode-btn.active {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.AdvancedSearch .simple-search,
+.AdvancedSearch .advanced-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.AdvancedSearch .search-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.AdvancedSearch .search-field-group label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.AdvancedSearch .search-actions {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.AdvancedSearch .saved-searches {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--border-color);
+}
+
+.AdvancedSearch .saved-searches h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--text-primary);
+  font-size: var(--font-base);
+}
+
+.AdvancedSearch .saved-searches-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.AdvancedSearch .saved-search-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.AdvancedSearch .saved-search-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.AdvancedSearch .search-name {
+  cursor: pointer;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.AdvancedSearch .search-name:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.AdvancedSearch .delete-btn {
+  background: none;
+  border: none;
+  color: var(--danger-color);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.AdvancedSearch .delete-btn:hover {
+  background-color: rgba(231, 76, 60, 0.1);
+}
+

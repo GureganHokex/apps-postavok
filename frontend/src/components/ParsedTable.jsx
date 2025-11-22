@@ -9,12 +9,18 @@ import { getFileItems, updateItem, getFileSheets } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useTableSort } from '../hooks/useTableSort';
+import { useColumnSettings } from '../hooks/useColumnSettings';
 import { retry, handleApiError } from '../utils/errorHandler';
+import { columnConfig, getColumnLabel, isColumnSortable } from '../utils/columnConfig';
 import { getSettings, saveSettings } from '../utils/settings';
 import SearchInput from './SearchInput';
+import AdvancedSearch from './AdvancedSearch';
 import ExportButton from './ExportButton';
 import BulkActions from './BulkActions';
 import ContextMenu from './ContextMenu';
+import ColumnSettings from './ColumnSettings';
+import SortableHeader from './SortableHeader';
 import './ParsedTable.css';
 
 const ParsedTable = memo(function ParsedTable({
@@ -46,11 +52,23 @@ const ParsedTable = memo(function ParsedTable({
   const [activeFilters, setActiveFilters] = useState(savedFilters);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, item: null });
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [advancedSearchParams, setAdvancedSearchParams] = useState(null);
+  
+  // Сортировка таблицы
+  const { sortedData, sortConfig, handleSort } = useTableSort(items);
+  
+  // Настройки колонок
+  const { visibleColumns } = useColumnSettings();
   
   // Сохраняем фильтры при изменении
   useEffect(() => {
     setSavedFilters(activeFilters);
   }, [activeFilters, setSavedFilters]);
+  
+  // Используем отсортированные данные
+  const displayItems = sortedData;
   
   // Генерируем предложения для автодополнения из текущих данных
   const searchSuggestions = useMemo(() => {
@@ -303,21 +321,50 @@ const ParsedTable = memo(function ParsedTable({
               className="filters"
             >
               <div className="search-section">
-                <SearchInput
-                  placeholder="Быстрый поиск по всем полям..."
-                  onSearch={(query) => {
-                    setSearchQuery(query);
-                    // Автоматически применяем поиск к фильтрам
-                    if (query) {
-                      setTempFilters({
-                        brewery: query,
-                        beer_name: query,
-                        style: query,
-                      });
-                    }
-                  }}
-                  suggestions={searchSuggestions}
-                />
+                <div className="search-input-wrapper">
+                  <SearchInput
+                    placeholder="Быстрый поиск по всем полям..."
+                    onSearch={(query) => {
+                      setSearchQuery(query);
+                      // Автоматически применяем поиск к фильтрам
+                      if (query) {
+                        setTempFilters({
+                          brewery: query,
+                          beer_name: query,
+                          style: query,
+                        });
+                      }
+                    }}
+                    suggestions={searchSuggestions}
+                  />
+                  <button
+                    className="button button-secondary"
+                    onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
+                    title="Расширенный поиск"
+                  >
+                    🔍
+                  </button>
+                </div>
+                {showAdvancedSearch && (
+                  <AdvancedSearch
+                    onSearch={(params) => {
+                      setAdvancedSearchParams(params);
+                      // Применяем параметры поиска
+                      if (params.field) {
+                        setTempFilters({
+                          [params.field]: params.query,
+                        });
+                      } else {
+                        setTempFilters({
+                          brewery: params.query,
+                          beer_name: params.query,
+                          style: params.query,
+                        });
+                      }
+                    }}
+                    onClose={() => setShowAdvancedSearch(false)}
+                  />
+                )}
               </div>
               
               <div className="filter-inputs">
@@ -403,6 +450,13 @@ const ParsedTable = memo(function ParsedTable({
                 </span>
               </div>
               <div className="table-actions-right">
+                <button
+                  className="button button-secondary"
+                  onClick={() => setShowColumnSettings(!showColumnSettings)}
+                  title="Настройки колонок"
+                >
+                  ⚙️ Колонки
+                </button>
                 <ExportButton
                   data={items}
                   filename={`items_${selectedSheet || 'all'}_${new Date().toISOString().split('T')[0]}`}
@@ -411,32 +465,47 @@ const ParsedTable = memo(function ParsedTable({
               </div>
             </div>
 
+            {showColumnSettings && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="column-settings-wrapper"
+              >
+                <ColumnSettings />
+              </motion.div>
+            )}
+
             <div className="table-container">
               <table className="table">
                 <thead>
                   <tr>
                     <th></th>
-                    <th>Пивоварня</th>
-                    <th>Название</th>
-                    <th>Стиль</th>
-                    <th>Крепость (%)</th>
-                    <th>IBU</th>
-                    <th>Цена</th>
-                    <th>Валюта</th>
-                    <th>Объём (л)</th>
-                    <th>Формат</th>
-                    <th>Остатки</th>
-                    <th>Описание</th>
+                    {visibleColumns.map(columnKey => {
+                      const config = columnConfig[columnKey];
+                      if (!config) return null;
+                      
+                      return isColumnSortable(columnKey) ? (
+                        <SortableHeader
+                          key={columnKey}
+                          columnKey={columnKey}
+                          label={config.label}
+                          sortConfig={sortConfig}
+                          onSort={handleSort}
+                        />
+                      ) : (
+                        <th key={columnKey}>{config.label}</th>
+                      );
+                    })}
                     <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.length === 0 ? (
+                  {displayItems.length === 0 ? (
                     <tr>
-                      <td colSpan="13" className="empty">Нет данных</td>
+                      <td colSpan={visibleColumns.length + 3} className="empty">Нет данных</td>
                     </tr>
                   ) : (
-                    items.map((item, index) => (
+                    displayItems.map((item, index) => (
                       <motion.tr
                         key={item.id}
                         initial={{ opacity: 0 }}

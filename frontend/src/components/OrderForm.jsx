@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import { getFileItems, createOrder, downloadOrder } from '../api';
 import { quantitySchema } from '../utils/validation';
 import DraggableOrderItem from './DraggableOrderItem';
+import OrderTemplates from './OrderTemplates';
 import './OrderForm.css';
 
 const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems, items }) {
@@ -171,25 +172,70 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
     }, 0);
   }, [orderItems, quantities]);
 
+  const handleApplyTemplate = useCallback((template) => {
+    // Применяем шаблон к текущему заказу
+    const templateQuantities = {};
+    template.items.forEach(item => {
+      templateQuantities[item.item_id] = item.quantity;
+    });
+    setQuantities(prev => ({ ...prev, ...templateQuantities }));
+    toast.success(`Шаблон "${template.name}" применен`);
+  }, []);
+
+  const handleSaveAsTemplate = useCallback(() => {
+    // Сохраняем текущий заказ как шаблон
+    const templateName = prompt('Введите название шаблона:');
+    if (!templateName) return;
+
+    const template = {
+      id: Date.now(),
+      name: templateName,
+      items: orderItems.map(item => ({
+        item_id: item.id,
+        quantity: quantities[item.id] || 0,
+        brewery: item.brewery,
+        beer_name: item.beer_name,
+        price: item.price,
+      })),
+      created_at: new Date().toISOString(),
+    };
+
+    const templates = JSON.parse(localStorage.getItem('order_templates') || '[]');
+    templates.push(template);
+    localStorage.setItem('order_templates', JSON.stringify(templates));
+    toast.success('Шаблон сохранен');
+  }, [orderItems, quantities]);
+
   return (
     <div className="OrderForm">
       <div className="card">
         <h2>Формирование заказа</h2>
 
-        <div className="order-controls">
-          <div className="format-selector">
-            <label>
-              Формат экспорта:
-              <select
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value)}
-                className="input"
+        <OrderTemplates onApplyTemplate={handleApplyTemplate} />
+
+          <div className="order-controls">
+            <div className="format-selector">
+              <label>
+                Формат экспорта:
+                <select
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  className="input"
+                >
+                  <option value="excel">Excel</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </label>
+            </div>
+
+            {orderItems.length > 0 && (
+              <button
+                className="button button-secondary"
+                onClick={handleSaveAsTemplate}
               >
-                <option value="excel">Excel</option>
-                <option value="pdf">PDF</option>
-              </select>
-            </label>
-          </div>
+                💾 Сохранить как шаблон
+              </button>
+            )}
 
           <div className="order-summary">
             <div className="summary-item">

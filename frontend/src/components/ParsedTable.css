@@ -64,6 +64,12 @@
   width: 100%;
 }
 
+.ParsedTable .search-input-wrapper {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
 .ParsedTable .filter-inputs {
   display: flex;
   gap: var(--spacing-md);
@@ -106,6 +112,13 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+}
+
+.ParsedTable .column-settings-wrapper {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
 }
 
 .ParsedTable .table-actions label {

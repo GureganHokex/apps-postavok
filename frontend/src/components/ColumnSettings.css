@@ -1,0 +1,106 @@
+/**
+ * Стили для настроек колонок
+ */
+
+.ColumnSettings {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.ColumnSettings .column-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.ColumnSettings .column-settings-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.ColumnSettings .column-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.ColumnSettings .column-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.ColumnSettings .column-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.ColumnSettings .column-item.visible {
+  border-left: 3px solid var(--primary-color);
+}
+
+.ColumnSettings .column-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  flex: 1;
+  user-select: none;
+}
+
+.ColumnSettings .column-checkbox input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.ColumnSettings .column-checkbox span {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ColumnSettings .column-order {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.ColumnSettings .order-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+  color: var(--text-secondary);
+}
+
+.ColumnSettings .order-btn:hover {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.ColumnSettings .column-info {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 2px solid var(--border-color);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+

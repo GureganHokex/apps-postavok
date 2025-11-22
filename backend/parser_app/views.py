@@ -11,7 +11,7 @@ from django.conf import settings
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, parser_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import File, ParsedItem, FileMetadata, Order
@@ -307,6 +307,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 
 @api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
 def upload_file(request):
     """
     Загружает файл на сервер.

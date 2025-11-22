@@ -31,17 +31,44 @@ class ExcelParser(BaseParser):
             Список словарей с данными о позициях
         """
         items = []
+        original_file_path = self.file_path
+        
+        # Проверяем, нужен ли временный файл (пробуем прочитать один лист)
+        temp_file_path = None
+        try:
+            # Пробуем прочитать первый лист для проверки
+            test_sheet = pd.read_excel(self.file_path, sheet_name=0, header=None, engine='openpyxl', nrows=1)
+        except (ValueError, Exception) as e:
+            error_msg = str(e)
+            if "Value must be either numerical" in error_msg or "wildcard" in error_msg or "Unable to read workbook" in error_msg:
+                # Файл содержит проблемные фильтры, создаем временный файл
+                logger.warning(f"Обнаружены проблемные фильтры в файле, создаем временный файл без фильтров")
+                temp_file_path = self._create_temp_file_without_filters()
+                if temp_file_path:
+                    self.file_path = temp_file_path
+                    logger.info(f"Создан временный файл без фильтров: {temp_file_path}")
+                else:
+                    logger.error("Не удалось создать временный файл без фильтров")
+                    return items
         
         try:
-            # Пробуем прочитать все листы
-            excel_file = pd.ExcelFile(self.file_path)
-            logger.info(f"Открыт файл Excel: {self.file_path}, листов: {len(excel_file.sheet_names)}")
+            # Получаем список листов
+            try:
+                excel_file = pd.ExcelFile(self.file_path, engine='openpyxl')
+                sheet_names = excel_file.sheet_names
+                excel_file.close()
+            except Exception as e:
+                # Если не удалось прочитать через ExcelFile, используем обходной путь
+                logger.warning(f"Не удалось прочитать через ExcelFile, используем обходной путь: {str(e)}")
+                sheet_names = self._get_sheet_names_workaround()
             
-            for sheet_name in excel_file.sheet_names:
+            logger.info(f"Открыт файл Excel: {self.file_path}, листов: {len(sheet_names)}")
+            
+            for sheet_name in sheet_names:
                 try:
                     logger.info(f"Обработка листа: {sheet_name}")
                     # Пробуем несколько стратегий чтения
-                    parsed_items = self._parse_sheet(excel_file, sheet_name)
+                    parsed_items = self._parse_sheet(None, sheet_name)
                     if parsed_items:
                         items.extend(parsed_items)
                         logger.info(f"Извлечено {len(parsed_items)} позиций из листа {sheet_name}")
@@ -60,10 +87,118 @@ class ExcelParser(BaseParser):
                 items.extend(parsed_items)
             except Exception as csv_error:
                 logger.error(f"Ошибка при чтении как CSV: {str(csv_error)}")
+        finally:
+            # Восстанавливаем оригинальный путь и удаляем временный файл
+            if temp_file_path:
+                self.file_path = original_file_path
+                try:
+                    import os
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                        logger.debug(f"Временный файл удален: {temp_file_path}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {str(e)}")
         
         return items
     
-    def _parse_sheet(self, excel_file: pd.ExcelFile, sheet_name: str) -> List[Dict]:
+    def _get_sheet_names_workaround(self) -> List[str]:
+        """
+        Получает список листов из Excel файла, обходя проблемные фильтры.
+        Использует прямое чтение XML из ZIP архива.
+        
+        Returns:
+            Список имен листов
+        """
+        import zipfile
+        import xml.etree.ElementTree as ET
+        
+        sheet_names = []
+        try:
+            with zipfile.ZipFile(self.file_path, 'r') as zip_ref:
+                # Читаем workbook.xml для получения списка листов
+                workbook_xml = zip_ref.read('xl/workbook.xml')
+                root = ET.fromstring(workbook_xml)
+                
+                # Находим все элементы sheet
+                ns = {'main': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+                for sheet in root.findall('.//main:sheet', ns):
+                    sheet_name = sheet.get('name')
+                    if sheet_name:
+                        sheet_names.append(sheet_name)
+        except Exception as e:
+            logger.warning(f"Не удалось получить список листов через обходной путь: {str(e)}")
+            # Fallback: пробуем стандартные имена
+            sheet_names = ['Фасовка', 'Розлив', 'БА']
+        
+        return sheet_names if sheet_names else ['Sheet1']
+    
+    def _create_temp_file_without_filters(self) -> Optional[str]:
+        """
+        Создает временный файл Excel без проблемных фильтров.
+        Удаляет элементы autoFilter из всех листов.
+        
+        Returns:
+            Путь к временному файлу или None в случае ошибки
+        """
+        import zipfile
+        import xml.etree.ElementTree as ET
+        import tempfile
+        import os
+        import shutil
+        
+        try:
+            # Создаем временный файл
+            temp_fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
+            os.close(temp_fd)
+            
+            # Копируем исходный файл во временный
+            shutil.copy2(self.file_path, temp_path)
+            
+            # Открываем временный файл как ZIP
+            with zipfile.ZipFile(temp_path, 'r') as zip_read:
+                # Создаем новый ZIP файл без фильтров
+                temp_zip_path = temp_path + '.new'
+                with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_write:
+                    # Копируем все файлы, кроме проблемных worksheet файлов
+                    for item in zip_read.infolist():
+                        data = zip_read.read(item.filename)
+                        
+                        # Если это worksheet файл, удаляем фильтры
+                        if item.filename.startswith('xl/worksheets/sheet') and item.filename.endswith('.xml'):
+                            try:
+                                root = ET.fromstring(data)
+                                # Удаляем все элементы autoFilter (используем рекурсивный поиск)
+                                auto_filter_ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}autoFilter'
+                                for parent in root.iter():
+                                    for child in list(parent):
+                                        if child.tag == auto_filter_ns:
+                                            parent.remove(child)
+                                
+                                # Сохраняем измененный XML
+                                data = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+                            except Exception as e:
+                                logger.warning(f"Не удалось обработать {item.filename}: {str(e)}")
+                                # Используем исходные данные
+                        
+                        zip_write.writestr(item, data)
+            
+            # Заменяем временный файл новым
+            os.replace(temp_zip_path, temp_path)
+            
+            logger.info(f"Создан временный файл без фильтров: {temp_path}")
+            return temp_path
+            
+        except Exception as e:
+            logger.error(f"Ошибка при создании временного файла: {str(e)}", exc_info=True)
+            # Удаляем временный файл в случае ошибки
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except:
+                pass
+            return None
+    
+    def _parse_sheet(self, excel_file: Optional[pd.ExcelFile], sheet_name: str) -> List[Dict]:
         """
         Парсит один лист Excel файла, пробуя разные стратегии.
         
@@ -74,35 +209,86 @@ class ExcelParser(BaseParser):
         Returns:
             Список словарей с данными позиций
         """
+        # Получаем имя файла для анализа
+        import os
+        file_name = os.path.basename(self.file_path)
+        
         # Сначала определяем тип поставщика
         detector = SupplierProfileDetector()
         
         # Стратегия 1: Ищем строку заголовков в первых 20 строках
         try:
-            df_sample = pd.read_excel(excel_file, sheet_name=sheet_name, header=None, nrows=20)
+            # Используем прямой путь к файлу вместо объекта ExcelFile для избежания ошибок
+            logger.debug(f"Стратегия 1: Читаем лист '{sheet_name}' из файла '{self.file_path}'")
+            df_full = pd.read_excel(self.file_path, sheet_name=sheet_name, header=None, engine='openpyxl')
+            logger.debug(f"Стратегия 1: Прочитано {len(df_full)} строк")
+            df_sample = df_full.head(20) if len(df_full) > 20 else df_full
             header_row = self._find_header_row(df_sample)
             
             if header_row is not None:
                 logger.debug(f"Найдена строка заголовков на строке {header_row + 1}")
-                df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row)
+                df = pd.read_excel(self.file_path, sheet_name=sheet_name, header=header_row, engine='openpyxl')
+                logger.debug(f"Стратегия 1: DataFrame с заголовками создан, строк: {len(df)}")
                 
                 # Определяем тип поставщика
                 try:
-                    supplier_type, characteristics = detector.detect(df, sheet_name)
+                    supplier_type, characteristics = detector.detect(df, sheet_name, file_name=file_name)
                     logger.info(f"Лист {sheet_name}: тип поставщика = {supplier_type.value}")
                 except Exception as e:
                     logger.warning(f"Ошибка при определении типа поставщика: {str(e)}", exc_info=True)
                     supplier_type = SupplierType.UNKNOWN
                     characteristics = {}
                 
-                return self._parse_dataframe(df, sheet_name, supplier_type=supplier_type, 
+                parsed_items = self._parse_dataframe(df, sheet_name, supplier_type=supplier_type, 
                                            characteristics=characteristics)
-        except Exception as e:
-            logger.debug(f"Стратегия 1 не сработала: {str(e)}")
+                logger.debug(f"Стратегия 1: Извлечено {len(parsed_items)} позиций")
+                if parsed_items:
+                    return parsed_items
+            else:
+                logger.debug("Стратегия 1: Строка заголовков не найдена")
+        except (ValueError, Exception) as e:
+            error_msg = str(e)
+            if "Value must be either numerical" in error_msg or "wildcard" in error_msg or "Unable to read workbook" in error_msg:
+                # Проблемные фильтры - создаем временный файл и пробуем снова
+                logger.warning(f"Обнаружены проблемные фильтры при чтении листа {sheet_name}, создаем временный файл")
+                temp_file_path = self._create_temp_file_without_filters()
+                if temp_file_path:
+                    original_path = self.file_path
+                    self.file_path = temp_file_path
+                    try:
+                        # Пробуем снова с временным файлом
+                        df_full = pd.read_excel(self.file_path, sheet_name=sheet_name, header=None, engine='openpyxl')
+                        df_sample = df_full.head(20) if len(df_full) > 20 else df_full
+                        header_row = self._find_header_row(df_sample)
+                        
+                        if header_row is not None:
+                            df = pd.read_excel(self.file_path, sheet_name=sheet_name, header=header_row, engine='openpyxl')
+                            
+                            try:
+                                supplier_type, characteristics = detector.detect(df, sheet_name, file_name=file_name)
+                                logger.info(f"Лист {sheet_name}: тип поставщика = {supplier_type.value}")
+                            except Exception as e2:
+                                logger.warning(f"Ошибка при определении типа поставщика: {str(e2)}")
+                                supplier_type = SupplierType.UNKNOWN
+                                characteristics = {}
+                            
+                            parsed_items = self._parse_dataframe(df, sheet_name, supplier_type=supplier_type, 
+                                                   characteristics=characteristics)
+                            if parsed_items:
+                                # НЕ удаляем временный файл здесь - он будет удален в finally блоке parse()
+                                # НЕ восстанавливаем путь здесь - это сделает parse()
+                                return parsed_items
+                    except Exception as e4:
+                        logger.error(f"Ошибка при чтении временного файла: {str(e4)}", exc_info=True)
+                    finally:
+                        # НЕ удаляем временный файл здесь - он будет удален в finally блоке parse()
+                        # НЕ восстанавливаем путь здесь - это сделает parse()
+                        pass
+            logger.debug(f"Стратегия 1 не сработала: {error_msg}")
         
         # Стратегия 2: Пробуем header=1 (вторая строка)
         try:
-            df = pd.read_excel(excel_file, sheet_name=sheet_name, header=1)
+            df = pd.read_excel(self.file_path, sheet_name=sheet_name, header=1, engine='openpyxl')
             
             # Определяем тип поставщика
             try:
@@ -114,7 +300,7 @@ class ExcelParser(BaseParser):
                 characteristics = {}
             
             parsed_items = self._parse_dataframe(df, sheet_name, supplier_type=supplier_type,
-                                                characteristics=characteristics, file_brewery=file_brewery)
+                                                characteristics=characteristics)
             if parsed_items:
                 logger.debug("Стратегия 2 (header=1) успешна")
                 return parsed_items
@@ -123,7 +309,7 @@ class ExcelParser(BaseParser):
         
         # Стратегия 3: Пробуем header=0 (первая строка)
         try:
-            df = pd.read_excel(excel_file, sheet_name=sheet_name, header=0)
+            df = pd.read_excel(self.file_path, sheet_name=sheet_name, header=0, engine='openpyxl')
             
             # Определяем тип поставщика
             try:
@@ -135,7 +321,7 @@ class ExcelParser(BaseParser):
                 characteristics = {}
             
             parsed_items = self._parse_dataframe(df, sheet_name, supplier_type=supplier_type,
-                                                characteristics=characteristics, file_brewery=file_brewery)
+                                                characteristics=characteristics)
             if parsed_items:
                 logger.debug("Стратегия 3 (header=0) успешна")
                 return parsed_items
@@ -144,7 +330,7 @@ class ExcelParser(BaseParser):
         
         # Стратегия 4: Читаем без заголовков и ищем их в данных
         try:
-            df = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
+            df = pd.read_excel(self.file_path, sheet_name=sheet_name, header=None, engine='openpyxl')
             header_row = self._find_header_row(df)
             if header_row is not None:
                 col_mapping = self._map_columns(df.iloc[header_row].tolist(), df)
@@ -153,7 +339,7 @@ class ExcelParser(BaseParser):
                     
                     # Определяем тип поставщика
                     try:
-                        supplier_type, characteristics = detector.detect(df_data, sheet_name)
+                        supplier_type, characteristics = detector.detect(df_data, sheet_name, file_name=file_name)
                         logger.info(f"Лист {sheet_name}: тип поставщика = {supplier_type.value}")
                     except Exception as e:
                         logger.warning(f"Ошибка при определении типа поставщика: {str(e)}", exc_info=True)
@@ -192,8 +378,10 @@ class ExcelParser(BaseParser):
         # Определяем тип поставщика, если не передан
         if supplier_type is None:
             try:
+                import os
+                file_name = os.path.basename(self.file_path)
                 detector = SupplierProfileDetector()
-                supplier_type, characteristics = detector.detect(df, sheet_name)
+                supplier_type, characteristics = detector.detect(df, sheet_name, file_name=file_name)
                 logger.info(f"Автоопределение типа поставщика: {supplier_type.value}")
             except Exception as e:
                 logger.warning(f"Ошибка при автоопределении типа поставщика: {str(e)}", exc_info=True)
@@ -258,6 +446,155 @@ class ExcelParser(BaseParser):
             col_mapping = self._analyze_data_content(df)
             logger.debug(f"Маппинг по анализу содержимого: {col_mapping}")
         
+        # Проверяем, не была ли колонка stock неправильно определена
+        # Это нужно делать для всех листов, даже если маппинг уже определен
+        if 'stock' in col_mapping and not df.empty:
+            stock_col_idx = col_mapping['stock']
+            try:
+                sample_rows = df.head(min(10, len(df)))
+                col_data = sample_rows.iloc[:, stock_col_idx].dropna().astype(str).tolist()
+                if col_data:
+                    avg_len = sum(len(v) for v in col_data[:5]) / min(5, len(col_data))
+                    text_lower = ' '.join(col_data[:5]).lower()
+                    
+                    # Проверяем, не является ли это форматом упаковки
+                    format_keywords = [
+                        'банка', 'can', 'кега', 'keg', 'кег', 'бутылка', 'bottle',
+                        'ж/б', 'бут', 'формат', 'format', 'упаковка', 'packaging',
+                        'тара', 'фасовка', 'фасовки', 'тип фасовки'
+                    ]
+                    has_format_keywords = any(
+                        keyword in text_lower for keyword in format_keywords
+                    )
+                    
+                    # Если содержит ключевые слова формата и короткая - это формат, а не остатки
+                    if has_format_keywords and avg_len <= 15:
+                        logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> format_type (содержит ключевые слова формата упаковки)")
+                        if 'format_type' not in col_mapping:
+                            col_mapping['format_type'] = stock_col_idx
+                        del col_mapping['stock']
+                    else:
+                        # Проверяем числовые значения только если это не формат
+                        numeric_values = []
+                        for val in col_data[:5]:
+                            try:
+                                num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                numeric_values.append(num_val)
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # Проверяем, не является ли это ценой
+                        # Цена обычно в диапазоне 50-10000 и может совпадать с остатками
+                        if numeric_values and 'price' in col_mapping:
+                            price_col_idx = col_mapping['price']
+                            try:
+                                price_data = sample_rows.iloc[:, price_col_idx].dropna().astype(str).tolist()
+                                price_numeric = []
+                                for val in price_data[:5]:
+                                    try:
+                                        num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                        price_numeric.append(num_val)
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Если значения совпадают с ценой - это цена, а не остатки
+                                if price_numeric and numeric_values:
+                                    stock_avg = sum(numeric_values) / len(numeric_values)
+                                    price_avg = sum(price_numeric) / len(price_numeric)
+                                    # Если средние значения очень близки (разница менее 1%) - это цена
+                                    if abs(stock_avg - price_avg) / max(price_avg, 1) < 0.01:
+                                        logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> price (значения совпадают с ценой)")
+                                        del col_mapping['stock']
+                            except Exception:
+                                pass
+                        
+                        # Проверяем, не является ли это объемом
+                        # Объем обычно в диапазоне 0.1-50 литров
+                        if numeric_values and 'volume' in col_mapping:
+                            volume_col_idx = col_mapping['volume']
+                            try:
+                                volume_data = sample_rows.iloc[:, volume_col_idx].dropna().astype(str).tolist()
+                                volume_numeric = []
+                                for val in volume_data[:5]:
+                                    try:
+                                        num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                        volume_numeric.append(num_val)
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Если значения совпадают с объемом - это объем, а не остатки
+                                if volume_numeric and numeric_values:
+                                    stock_avg = sum(numeric_values) / len(numeric_values)
+                                    volume_avg = sum(volume_numeric) / len(volume_numeric)
+                                    # Если средние значения очень близки (разница менее 1%) - это объем
+                                    if abs(stock_avg - volume_avg) / max(volume_avg, 0.01) < 0.01:
+                                        logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> volume (значения совпадают с объемом)")
+                                        del col_mapping['stock']
+                            except Exception:
+                                pass
+                    
+                    # Проверяем, не является ли это ценой по диапазону значений
+                    # Цена обычно в диапазоне 50-10000
+                    if numeric_values and 'price' not in col_mapping:
+                        stock_avg = sum(numeric_values) / len(numeric_values)
+                        # Если среднее значение в диапазоне цен и нет ключевых слов остатков - это может быть цена
+                        if 50 <= stock_avg <= 10000:
+                            # Проверяем заголовок колонки
+                            headers = df.columns.tolist() if hasattr(df.columns, 'tolist') else []
+                            if stock_col_idx < len(headers):
+                                header_lower = str(headers[stock_col_idx]).lower()
+                                stock_header_keywords = ['остаток', 'stock', 'наличие', 'availability', 'склад', 'количество']
+                                price_header_keywords = ['цена', 'price', 'стоимость', 'cost', 'руб']
+                                
+                                # Если в заголовке есть ключевые слова цены, но нет остатков - это цена
+                                has_price_header = any(kw in header_lower for kw in price_header_keywords)
+                                has_stock_header = any(kw in header_lower for kw in stock_header_keywords)
+                                
+                                if has_price_header and not has_stock_header:
+                                    logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> price (заголовок указывает на цену)")
+                                    if 'price' not in col_mapping:
+                                        col_mapping['price'] = stock_col_idx
+                                    del col_mapping['stock']
+                    
+                    # Проверяем, не является ли это стилем пива
+                    style_keywords_check = [
+                        'ipa', 'lager', 'ale', 'stout', 'porter', 'pilsner', 'wheat', 'sour',
+                        'gose', 'neipa', 'hazy', 'imperial', 'double', 'triple',
+                        'weisse', 'weizen', 'hopfen', 'belgian', 'witbier', 'saison',
+                        'томатный', 'tomato', 'georgian', 'new england', 'grapefruit',
+                        'strawberry', 'sour ale', 'barrel', 'aged', 'wild'
+                    ]
+                    has_style_keywords = any(
+                        keyword in text_lower for keyword in style_keywords_check
+                    )
+                    
+                    # Если содержит ключевые слова стилей - это стиль, а не остатки
+                    if has_style_keywords and 3 <= avg_len <= 50:
+                        logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> style (содержит ключевые слова стилей пива, средняя длина: {avg_len:.1f})")
+                        # Если style еще не определен, используем эту колонку
+                        if 'style' not in col_mapping:
+                            col_mapping['style'] = stock_col_idx
+                        del col_mapping['stock']
+                    # Если средняя длина больше 50 символов - это описание, а не остатки
+                    elif avg_len > 50:
+                        description_keywords = [
+                            'вкус', 'аромат', 'вкусовые', 'характеристики', 'описание',
+                            'taste', 'aroma', 'flavor', 'description', 'характер',
+                            'насыщенный', 'сочный', 'яркий', 'кислый', 'сладкий'
+                        ]
+                        has_description_keywords = any(
+                            keyword in text_lower for keyword in description_keywords
+                        )
+                        # Если содержит описательные слова - это точно описание
+                        if has_description_keywords:
+                            logger.debug(f"Лист {sheet_name}: Колонка {stock_col_idx} переопределена: stock -> description (длинный текст с описательными словами, средняя длина: {avg_len:.1f})")
+                            # Если description еще не определен, используем эту колонку
+                            if 'description' not in col_mapping:
+                                col_mapping['description'] = stock_col_idx
+                            del col_mapping['stock']
+            except Exception as e:
+                logger.debug(f"Ошибка при проверке колонки stock для листа {sheet_name}: {str(e)}")
+        
         # Если маппинг определен частично, но не все ключевые поля найдены,
         # запускаем агрессивный анализ содержимого всех колонок
         essential_fields = ['beer_name', 'price']
@@ -272,7 +609,7 @@ class ExcelParser(BaseParser):
             logger.warning(f"Не удалось определить маппинг колонок для листа {sheet_name}")
             return items
         
-        logger.debug(f"Используется маппинг: {col_mapping}")
+        logger.debug(f"Используется маппинг для листа {sheet_name}: {col_mapping}")
         
         # Парсим строки данных
         # Сохраняем последнюю заполненную пивоварню для заполнения пустых значений
@@ -298,25 +635,128 @@ class ExcelParser(BaseParser):
         
         for idx, row in df.iterrows():
             try:
+                # КРИТИЧЕСКИ ВАЖНО: Сохраняем исходное значение brewery ДО извлечения данных
+                # Это нужно для проверки на город после нормализации
+                brewery_col_idx = col_mapping.get('brewery')
+                brewery_val_original_raw = ''
+                if brewery_col_idx is not None:
+                    try:
+                        raw_value = row.iloc[brewery_col_idx]
+                        if pd.notna(raw_value):
+                            brewery_val_original_raw = str(raw_value).strip()
+                        logger.debug(f"Строка {idx}: brewery_val_original_raw = '{brewery_val_original_raw}'")
+                    except (IndexError, KeyError) as e:
+                        logger.debug(f"Ошибка при извлечении brewery из строки {idx}: {str(e)}")
+                        pass
+                
                 item = self._extract_row_data(row, col_mapping)
                 if item:
+                    # КРИТИЧЕСКИ ВАЖНО: Проверяем валидность элемента ПЕРЕД обработкой
+                    # Используем ИСХОДНОЕ значение brewery из строки DataFrame (до нормализации)
+                    # Если brewery_val_original_raw пустое, пытаемся получить из item['brewery_original']
+                    brewery_val_original = brewery_val_original_raw if brewery_val_original_raw else (item.get('brewery_original', '').strip() if item.get('brewery_original') else '')
+                    # Если все еще пустое, используем текущее значение brewery (но это уже нормализованное)
+                    if not brewery_val_original:
+                        brewery_val_original = item.get('brewery', '').strip() if item.get('brewery') else ''
+                    
+                    beer_name_val_check = item.get('beer_name', '').strip() if item.get('beer_name') else ''
+                    style_val_check = item.get('style', '').strip() if item.get('style') else ''
+                    description_val_check = item.get('description', '').strip() if item.get('description') else ''
+                    format_type_val_check = item.get('format_type', '').strip() if item.get('format_type') else ''
+                    
+                    # Функция проверки пустых значений
+                    def is_empty_or_dash(val):
+                        """Проверяет, является ли значение пустым или только тире"""
+                        if val is None:
+                            return True
+                        if not val:
+                            return True
+                        val_str = str(val).strip()
+                        if not val_str:
+                            return True
+                        val_str_lower = val_str.lower()
+                        # Проверяем различные варианты тире и пустых значений
+                        return val_str_lower in ['-', '—', '–', '', 'nan', 'none', 'null', 'n/a', 'na']
+                    
+                    # КРИТИЧЕСКАЯ ПРОВЕРКА: если brewery содержит город и все ключевые поля пустые - пропускаем
+                    if brewery_val_original:
+                        brewery_lower = str(brewery_val_original).lower()
+                        # Расширенный список паттернов для городов
+                        city_patterns = [
+                            'г.', 'г ', 'город', 'city',
+                            'владимир', 'москва', 'санкт-петербург', 'spb', 'мск',
+                            'санкт-петербург', 'петербург', 'питер', 'spb',
+                            'санкт петербург', 'санктпетербург'
+                        ]
+                        has_city_in_brewery = any(pattern in brewery_lower for pattern in city_patterns)
+                        
+                        if has_city_in_brewery:
+                            is_empty_beer_name = is_empty_or_dash(beer_name_val_check)
+                            is_empty_style = is_empty_or_dash(style_val_check)
+                            is_empty_description = is_empty_or_dash(description_val_check)
+                            is_empty_format = is_empty_or_dash(format_type_val_check)
+                            
+                            logger.debug(f"Строка {idx}: brewery='{brewery_val_original}', has_city={has_city_in_brewery}, "
+                                       f"beer_name_empty={is_empty_beer_name}, style_empty={is_empty_style}, "
+                                       f"description_empty={is_empty_description}, format_empty={is_empty_format}")
+                            
+                            # Если все эти поля пустые - точно пропускаем
+                            if is_empty_beer_name and is_empty_style and is_empty_description and is_empty_format:
+                                logger.info(f"ПРОПУЩЕНА строка {idx} с brewery '{brewery_val_original}' - содержит город и все поля (beer_name, style, description, format_type) пустые")
+                                continue
+                            
+                            # Если хотя бы beer_name пустой - тоже пропускаем (даже если есть другие поля)
+                            if is_empty_beer_name:
+                                logger.info(f"ПРОПУЩЕНА строка {idx} с brewery '{brewery_val_original}' - содержит город и нет beer_name")
+                                continue
+                    
                     # Обработка пивоварни в зависимости от типа поставщика
                     if supplier_type == SupplierType.BREWERY:
                         # Для пивоварни устанавливаем название по умолчанию, если не найдено
                         if not item.get('brewery') and default_brewery:
-                            item['brewery'] = default_brewery
+                            # Нормализуем brewery (удаляем город) перед установкой
+                            from ..normalizers import DataNormalizer
+                            normalizer = DataNormalizer()
+                            brewery_normalized = normalizer.normalize_brewery(default_brewery)
+                            item['brewery'] = brewery_normalized if brewery_normalized else default_brewery
                     else:
                         # Для дистрибьютора используем логику с предыдущей пивоварней
                         if not item.get('brewery') and last_brewery:
-                            item['brewery'] = last_brewery
+                            # Нормализуем brewery (удаляем город) перед установкой
+                            from ..normalizers import DataNormalizer
+                            normalizer = DataNormalizer()
+                            brewery_normalized = normalizer.normalize_brewery(last_brewery)
+                            item['brewery'] = brewery_normalized if brewery_normalized else last_brewery
                         # Сохраняем текущую пивоварню, если она заполнена
                         elif item.get('brewery'):
-                            last_brewery = item['brewery']
+                            # Нормализуем brewery перед сохранением в last_brewery
+                            from ..normalizers import DataNormalizer
+                            normalizer = DataNormalizer()
+                            brewery_normalized = normalizer.normalize_brewery(item['brewery'])
+                            last_brewery = brewery_normalized if brewery_normalized else item['brewery']
+                    
+                    # Нормализуем brewery (удаляем город) сразу после установки
+                    # Это критически важно для удаления городов из названий пивоварен
+                    if item.get('brewery'):
+                        from ..normalizers import DataNormalizer
+                        normalizer = DataNormalizer()
+                        normalized_brewery = normalizer.normalize_brewery(item['brewery'])
+                        if normalized_brewery:
+                            item['brewery'] = normalized_brewery
+                        else:
+                            # Если после нормализации brewery стал пустым, оставляем исходное значение
+                            # но логируем это для отладки
+                            logger.debug(f"Brewery стал пустым после нормализации: '{item['brewery']}'")
                     
                     # Для розливных листов автоматически устанавливаем формат "кега"
-                    if is_draft_sheet and not item.get('format_type'):
-                        item['format_type'] = 'кега'
-                    
+                    # Важно: устанавливаем формат даже если он уже есть, но не является "кега"
+                    # Это гарантирует, что для разливного пива всегда будет "кега"
+                    if is_draft_sheet:
+                        current_format = item.get('format_type', '').lower().strip()
+                        # Если формат не установлен или не является "кега" - устанавливаем "кега"
+                        if not current_format or current_format not in ['кега', 'keg', 'кег']:
+                            item['format_type'] = 'кега'
+                            logger.debug(f"Установлен формат 'кега' для разливного пива (лист: {sheet_name})")
                     item['raw_source_location'] = {
                         'sheet': sheet_name,
                         'row': int(idx) + 1
@@ -748,30 +1188,103 @@ class ExcelParser(BaseParser):
                 if has_style_keywords and avg_length < 50:
                     analysis['style'] = True
             
-            # Формат обычно очень короткий (1-15 символов)
+            # Формат обычно очень короткий (1-15 символов) и содержит ключевые слова формата
+            # Важно: формат должен определяться ДО остатков, чтобы не путаться
             if avg_length <= 15:
                 format_keywords = [
                     'банка', 'can', 'кега', 'keg', 'кег', 'бутылка', 'bottle',
-                    'ж/б', 'бут', 'л', 'ml', 'мл'
+                    'ж/б', 'бут', 'л', 'ml', 'мл', 'формат', 'format', 'упаковка',
+                    'packaging', 'тара', 'фасовка', 'фасовки', 'тип фасовки'
                 ]
                 has_format_keywords = any(
                     keyword in ' '.join(text_values).lower()
                     for keyword in format_keywords
                 )
+                # Формат определяется если есть ключевые слова формата
+                # И НЕ является числовой колонкой (числа - это остатки, цена или объем)
                 if has_format_keywords:
-                    analysis['format_type'] = True
+                    # Если это не чисто числовая колонка (меньше 70% чисел) - это формат
+                    if numeric_ratio < 0.7:
+                        analysis['format_type'] = True
+                    # Если числовая, но содержит ключевые слова формата - тоже формат
+                    elif numeric_ratio >= 0.7 and has_format_keywords:
+                        # Проверяем, не является ли это объемом или ценой
+                        if numeric_values:
+                            avg_value = sum(numeric_values) / len(numeric_values)
+                            # Если значения в диапазоне объемов (0.1-50) и есть ключевые слова формата - это формат
+                            if 0.1 <= avg_value <= 50:
+                                analysis['format_type'] = True
+                            # Если значения в диапазоне цен, но есть ключевые слова формата - это формат
+                            elif 50 <= avg_value <= 10000 and ('банка' in text_lower or 'can' in text_lower or 'бутылка' in text_lower or 'bottle' in text_lower):
+                                analysis['format_type'] = True
             
             # Остатки обычно содержат слова типа "много", "мало", "достаточно"
+            # Или короткие числовые значения (количество на складе)
+            # Важно: остатки НЕ должны быть длинным текстом (это описание)
+            # И НЕ должны быть стилями пива (стили могут быть короткими, но это не остатки)
             stock_keywords = [
                 'много', 'мало', 'достаточно', 'нет', 'есть', 'в наличии',
-                'many', 'few', 'enough', 'available', 'stock'
+                'many', 'few', 'enough', 'available', 'stock', 'остаток',
+                'наличие', 'склад', 'количество', 'кол-во', 'шт', 'штук'
             ]
             has_stock_keywords = any(
                 keyword in ' '.join(text_values).lower()
                 for keyword in stock_keywords
             )
-            if has_stock_keywords:
+            
+            # Проверяем, не является ли это стилем пива
+            style_keywords_check = [
+                'ipa', 'lager', 'ale', 'stout', 'porter', 'pilsner', 'wheat', 'sour',
+                'gose', 'neipa', 'hazy', 'imperial', 'double', 'triple',
+                'weisse', 'weizen', 'hopfen', 'belgian', 'witbier', 'saison',
+                'томатный', 'tomato', 'georgian', 'new england', 'grapefruit',
+                'strawberry', 'sour ale', 'barrel', 'aged', 'wild'
+            ]
+            has_style_keywords = any(
+                keyword in ' '.join(text_values).lower()
+                for keyword in style_keywords_check
+            )
+            
+            # Остатки должны быть короткими (не более 50 символов в среднем)
+            # И содержать ключевые слова остатков
+            # И НЕ должны содержать ключевые слова стилей пива
+            if has_stock_keywords and avg_length <= 50 and not has_style_keywords:
                 analysis['stock'] = True
+            # Также остатки могут быть чисто числовыми значениями (количество на складе)
+            # НО только если это НЕ цена и НЕ объем
+            elif numeric_ratio > 0.7 and avg_length <= 10 and not has_style_keywords:
+                if numeric_values:
+                    avg_value = sum(numeric_values) / len(numeric_values)
+                    # Остатки могут быть любыми числами, но если они в диапазоне цен (50-10000)
+                    # или объемов (0.1-50), нужно проверить заголовок колонки
+                    is_price_range = 50 <= avg_value <= 10000
+                    is_volume_range = 0.1 <= avg_value <= 50
+                    
+                    # Если не в диапазоне цен и объемов - это остатки
+                    if not is_price_range and not is_volume_range and 0 <= avg_value <= 10000:
+                        analysis['stock'] = True
+                    # Если в диапазоне цен или объемов, но есть ключевые слова остатков - это остатки
+                    elif (is_price_range or is_volume_range) and has_stock_keywords:
+                        analysis['stock'] = True
+            
+            # Описание обычно длинное (более 50 символов) и содержит описательные слова
+            # НЕ должно содержать ключевые слова остатков
+            description_keywords = [
+                'вкус', 'аромат', 'вкусовые', 'характеристики', 'описание',
+                'taste', 'aroma', 'flavor', 'description', 'характер',
+                'насыщенный', 'сочный', 'яркий', 'кислый', 'сладкий'
+            ]
+            has_description_keywords = any(
+                keyword in ' '.join(text_values).lower()
+                for keyword in description_keywords
+            )
+            # Описание должно быть длинным и содержать описательные слова
+            # И НЕ должно содержать ключевые слова остатков
+            if avg_length > 50 and has_description_keywords and not has_stock_keywords:
+                analysis['description'] = True
+            # Если очень длинное (более 150 символов) и не содержит ключевых слов остатков
+            elif avg_length > 150 and not has_stock_keywords:
+                analysis['description'] = True
         
         return analysis
     
@@ -814,10 +1327,138 @@ class ExcelParser(BaseParser):
                 continue
         
         # Определяем приоритеты полей (важные поля первыми)
+        # format_type должен быть перед stock, чтобы формат не путался с остатками
+        # description должен быть перед stock, чтобы длинные тексты определялись как описание
         field_priority = [
             'beer_name', 'price', 'style', 'abv', 'ibu', 
-            'brewery', 'volume', 'format_type', 'stock', 'description'
+            'brewery', 'volume', 'format_type', 'description', 'stock'
         ]
+        
+        # Проверяем, не была ли колонка stock неправильно определена
+        # Если колонка определена как stock, но содержит стили пива, цену, объем, формат или длинный текст - переопределяем
+        if 'stock' in mapping:
+            stock_col_idx = mapping['stock']
+            try:
+                col_data = sample_rows.iloc[:, stock_col_idx].dropna().astype(str).tolist()
+                if col_data:
+                    avg_len = sum(len(v) for v in col_data[:5]) / min(5, len(col_data))
+                    text_lower = ' '.join(col_data[:5]).lower()
+                    
+                    # Проверяем, не является ли это форматом упаковки
+                    format_keywords = [
+                        'банка', 'can', 'кега', 'keg', 'кег', 'бутылка', 'bottle',
+                        'ж/б', 'бут', 'формат', 'format', 'упаковка', 'packaging',
+                        'тара', 'фасовка', 'фасовки', 'тип фасовки'
+                    ]
+                    has_format_keywords = any(
+                        keyword in text_lower for keyword in format_keywords
+                    )
+                    
+                    # Если содержит ключевые слова формата и короткая - это формат, а не остатки
+                    if has_format_keywords and avg_len <= 15:
+                        logger.debug(f"Колонка {stock_col_idx} переопределена: stock -> format_type (содержит ключевые слова формата упаковки)")
+                        if 'format_type' not in mapping:
+                            mapping['format_type'] = stock_col_idx
+                        del mapping['stock']
+                        used_indices.discard(stock_col_idx)
+                        used_indices.add(stock_col_idx)
+                    else:
+                        # Проверяем числовые значения только если это не формат
+                        numeric_values = []
+                        for val in col_data[:5]:
+                            try:
+                                num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                numeric_values.append(num_val)
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # Проверяем, не является ли это ценой
+                        if numeric_values and 'price' in mapping:
+                            price_col_idx = mapping['price']
+                            try:
+                                price_data = sample_rows.iloc[:, price_col_idx].dropna().astype(str).tolist()
+                                price_numeric = []
+                                for val in price_data[:5]:
+                                    try:
+                                        num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                        price_numeric.append(num_val)
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Если значения совпадают с ценой - это цена, а не остатки
+                                if price_numeric and numeric_values:
+                                    stock_avg = sum(numeric_values) / len(numeric_values)
+                                    price_avg = sum(price_numeric) / len(price_numeric)
+                                    if abs(stock_avg - price_avg) / max(price_avg, 1) < 0.01:
+                                        logger.debug(f"Колонка {stock_col_idx} переопределена: stock -> price (значения совпадают с ценой)")
+                                        del mapping['stock']
+                                        used_indices.discard(stock_col_idx)
+                            except Exception:
+                                pass
+                        
+                        # Проверяем, не является ли это объемом
+                        if numeric_values and 'volume' in mapping:
+                            volume_col_idx = mapping['volume']
+                            try:
+                                volume_data = sample_rows.iloc[:, volume_col_idx].dropna().astype(str).tolist()
+                                volume_numeric = []
+                                for val in volume_data[:5]:
+                                    try:
+                                        num_val = float(str(val).replace(',', '.').replace(' ', ''))
+                                        volume_numeric.append(num_val)
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                # Если значения совпадают с объемом - это объем, а не остатки
+                                if volume_numeric and numeric_values:
+                                    stock_avg = sum(numeric_values) / len(numeric_values)
+                                    volume_avg = sum(volume_numeric) / len(volume_numeric)
+                                    if abs(stock_avg - volume_avg) / max(volume_avg, 0.01) < 0.01:
+                                        logger.debug(f"Колонка {stock_col_idx} переопределена: stock -> volume (значения совпадают с объемом)")
+                                        del mapping['stock']
+                                        used_indices.discard(stock_col_idx)
+                            except Exception:
+                                pass
+                        
+                        # Проверяем, не является ли это стилем пива
+                        style_keywords_check = [
+                            'ipa', 'lager', 'ale', 'stout', 'porter', 'pilsner', 'wheat', 'sour',
+                            'gose', 'neipa', 'hazy', 'imperial', 'double', 'triple',
+                            'weisse', 'weizen', 'hopfen', 'belgian', 'witbier', 'saison',
+                            'томатный', 'tomato', 'georgian', 'new england', 'grapefruit',
+                            'strawberry', 'sour ale', 'barrel', 'aged', 'wild'
+                        ]
+                        has_style_keywords = any(
+                            keyword in text_lower for keyword in style_keywords_check
+                        )
+                        
+                        # Если содержит ключевые слова стилей - это стиль, а не остатки
+                        if has_style_keywords and 3 <= avg_len <= 50:
+                            logger.debug(f"Колонка {stock_col_idx} переопределена: stock -> style (содержит ключевые слова стилей пива)")
+                            if 'style' not in mapping:
+                                mapping['style'] = stock_col_idx
+                            del mapping['stock']
+                            used_indices.discard(stock_col_idx)
+                            used_indices.add(stock_col_idx)
+                        # Если средняя длина больше 50 символов - это описание, а не остатки
+                        elif avg_len > 50:
+                            description_keywords = [
+                                'вкус', 'аромат', 'вкусовые', 'характеристики', 'описание',
+                                'taste', 'aroma', 'flavor', 'description', 'характер',
+                                'насыщенный', 'сочный', 'яркий', 'кислый', 'сладкий'
+                            ]
+                            has_description_keywords = any(
+                                keyword in text_lower for keyword in description_keywords
+                            )
+                            # Если содержит описательные слова - это точно описание
+                            if has_description_keywords:
+                                logger.debug(f"Колонка {stock_col_idx} переопределена: stock -> description (длинный текст с описательными словами)")
+                                mapping['description'] = stock_col_idx
+                                del mapping['stock']
+                                used_indices.discard(stock_col_idx)
+                                used_indices.add(stock_col_idx)
+            except Exception as e:
+                logger.debug(f"Ошибка при проверке колонки stock: {str(e)}")
         
         # Применяем анализ, учитывая приоритеты
         for field in field_priority:
@@ -1206,7 +1847,11 @@ class ExcelParser(BaseParser):
                             if 'brewery' not in col_mapping or not item.get('brewery'):
                                 brewery_from_name = self._extract_brewery_from_name(value_str)
                                 if brewery_from_name:
-                                    item['brewery'] = brewery_from_name
+                                    # Нормализуем brewery (удаляем город) сразу после извлечения
+                                    from ..normalizers import DataNormalizer
+                                    normalizer = DataNormalizer()
+                                    brewery_normalized = normalizer.normalize_brewery(brewery_from_name)
+                                    item['brewery'] = brewery_normalized if brewery_normalized else brewery_from_name
                                     # Удаляем brewery из названия
                                     beer_name_cleaned = value_str
                                     # Если brewery была в кавычках, удаляем кавычки с содержимым
@@ -1237,6 +1882,17 @@ class ExcelParser(BaseParser):
                                     item[field] = value_str
                             else:
                                 item[field] = value_str
+                        elif field == 'brewery':
+                            # КРИТИЧЕСКИ ВАЖНО: сохраняем исходное значение brewery ДО нормализации
+                            # Это нужно для проверки на город в фильтрации
+                            if 'brewery_original' not in item:
+                                item['brewery_original'] = value_str
+                            # Нормализуем brewery (удаляем город) сразу при извлечении из колонки
+                            # Это гарантирует, что города будут удалены для всех листов, включая "Фасовка"
+                            from ..normalizers import DataNormalizer
+                            normalizer = DataNormalizer()
+                            brewery_normalized = normalizer.normalize_brewery(value_str)
+                            item[field] = brewery_normalized if brewery_normalized else value_str
                         else:
                             item[field] = value_str
             except (IndexError, KeyError, ValueError, TypeError) as e:
@@ -1275,7 +1931,11 @@ class ExcelParser(BaseParser):
                 if 'brewery' in field_lower or 'пивоварня' in field_lower:
                     # Если brewery пустое, перемещаем значение туда
                     if not brewery_val_raw:
-                        item['brewery'] = field_value
+                        # Нормализуем brewery (удаляем город) перед установкой
+                        from ..normalizers import DataNormalizer
+                        normalizer = DataNormalizer()
+                        brewery_normalized = normalizer.normalize_brewery(field_value)
+                        item['brewery'] = brewery_normalized if brewery_normalized else field_value
                         item[field_name] = ''  # Очищаем исходное поле
                     elif brewery_val_raw != field_value:
                         # Если brewery уже заполнено и отличается, оставляем brewery, очищаем это поле
@@ -1285,15 +1945,26 @@ class ExcelParser(BaseParser):
         if not brewery_val_raw and beer_name_val_raw:
             beer_name_lower = str(beer_name_val_raw).lower()
             if 'brewery' in beer_name_lower or 'пивоварня' in beer_name_lower:
-                item['brewery'] = beer_name_val_raw
+                # Нормализуем brewery (удаляем город) перед установкой
+                from ..normalizers import DataNormalizer
+                normalizer = DataNormalizer()
+                brewery_normalized = normalizer.normalize_brewery(beer_name_val_raw)
+                item['brewery'] = brewery_normalized if brewery_normalized else beer_name_val_raw
                 item['beer_name'] = ''
         
         # Фильтрация: отбрасываем строки-заголовки без данных о пиве
         # Если есть только brewery, но нет beer_name, price, style - это заголовок секции
+        # ВАЖНО: Используем ИСХОДНОЕ значение brewery ДО нормализации для проверки на город
+        brewery_val_original = item.get('brewery_original', '').strip() if item.get('brewery_original') else ''
+        # Если brewery_original не было сохранено, используем текущее значение brewery
+        if not brewery_val_original:
+            brewery_val_original = item.get('brewery', '').strip() if item.get('brewery') else ''
         brewery_val_check = item.get('brewery', '').strip() if item.get('brewery') else ''
         beer_name_val_check = item.get('beer_name', '').strip() if item.get('beer_name') else ''
         price_val_check = item.get('price', '').strip() if item.get('price') else ''
         style_val_check = item.get('style', '').strip() if item.get('style') else ''
+        description_val_check = item.get('description', '').strip() if item.get('description') else ''
+        format_type_val_check = item.get('format_type', '').strip() if item.get('format_type') else ''
         
         if brewery_val_check and not beer_name_val_check and not price_val_check and not style_val_check:
             # Проверяем, не содержит ли brewery адрес (г., г., город, city)
@@ -1312,8 +1983,78 @@ class ExcelParser(BaseParser):
             
             if has_address or has_service_keyword or len(brewery_val_check.strip()) < 3:
                 # Это заголовок секции или некорректная строка, пропускаем
-                logger.debug(f"Пропущена строка с brewery '{brewery_val_check}' - похоже на заголовок")
+                logger.debug(f"Пропущена строка с brewery '{brewery_val_check}' - похоже на заголовок или содержит адрес")
                 return None
+        
+        # Определяем функцию проверки пустых значений в начале метода
+        def is_empty_value(val):
+            """Проверяет, является ли значение пустым или только тире"""
+            if val is None:
+                return True
+            if not val:
+                return True
+            val_str = str(val).strip()
+            if not val_str:
+                return True
+            val_str_lower = val_str.lower()
+            # Проверяем различные варианты тире и пустых значений
+            return val_str_lower in ['-', '—', '–', '', 'nan', 'none', 'null', 'n/a', 'na']
+        
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: если brewery содержит город - всегда нормализуем и проверяем
+        # Это нужно для фильтрации строк типа "4 Brewers г. Владимир" или "B-Side г. Санкт-Петербург" даже если есть цена
+        # Используем ИСХОДНОЕ значение brewery (до нормализации в _extract_row_data)
+        if brewery_val_original:
+            brewery_lower = str(brewery_val_original).lower()
+            # Расширенный список паттернов для городов (включая все варианты написания)
+            city_patterns = [
+                'г.', 'г ', 'город', 'city',
+                'владимир', 'москва', 'санкт-петербург', 'spb', 'мск',
+                'санкт-петербург', 'петербург', 'питер', 'spb',
+                'санкт петербург', 'санктпетербург'
+            ]
+            has_city_in_brewery = any(pattern in brewery_lower for pattern in city_patterns)
+            
+            if has_city_in_brewery:
+                # Нормализуем brewery (удаляем город) - если еще не было нормализовано
+                from ..normalizers import DataNormalizer
+                normalizer = DataNormalizer()
+                brewery_normalized = normalizer.normalize_brewery(brewery_val_original)
+                
+                # Если после нормализации brewery все еще содержит город - пропускаем строку
+                if brewery_normalized:
+                    brewery_normalized_lower = brewery_normalized.lower()
+                    still_has_city = any(pattern in brewery_normalized_lower for pattern in city_patterns)
+                    if still_has_city:
+                        logger.debug(f"Пропущена строка с brewery '{brewery_val_original}' - после нормализации все еще содержит город")
+                        return None
+                    # Обновляем brewery в item
+                    item['brewery'] = brewery_normalized
+                    brewery_val_check = brewery_normalized
+                else:
+                    # Если нормализация вернула пустое значение - пропускаем строку
+                    logger.debug(f"Пропущена строка с brewery '{brewery_val_original}' - после нормализации стал пустым")
+                    return None
+                
+                # КРИТИЧЕСКАЯ ПРОВЕРКА: если brewery содержит город И при этом пустые/пропущены:
+                # - beer_name ИЛИ
+                # - style ИЛИ  
+                # - description ИЛИ
+                # - format_type
+                # То такая строка считается некорректной и пропускается
+                is_empty_beer_name = is_empty_value(beer_name_val_check)
+                is_empty_style = is_empty_value(style_val_check)
+                is_empty_description = is_empty_value(description_val_check)
+                is_empty_format = is_empty_value(format_type_val_check)
+                
+                # Если все эти поля пустые - точно пропускаем
+                if is_empty_beer_name and is_empty_style and is_empty_description and is_empty_format:
+                    logger.debug(f"Пропущена строка с brewery '{brewery_val_original}' - содержит город и все поля (beer_name, style, description, format_type) пустые")
+                    return None
+                
+                # Если хотя бы beer_name пустой - тоже пропускаем (даже если есть другие поля)
+                if is_empty_beer_name:
+                    logger.debug(f"Пропущена строка с brewery '{brewery_val_original}' - содержит город и нет beer_name")
+                    return None
         
         # Строгая проверка валидности записи
         # Запись считается валидной, если:
@@ -1326,20 +2067,25 @@ class ExcelParser(BaseParser):
         price_val = price_val_check
         style_val = style_val_check
         
-        # Проверяем, что все поля не являются только тире или пустыми
-        def is_empty_value(val):
-            """Проверяет, является ли значение пустым или только тире"""
-            if not val:
-                return True
-            val_str = str(val).strip().lower()
-            return val_str in ['-', '—', '–', '', 'nan', 'none', 'null']
-        
         # Подсчитываем количество заполненных полей
         filled_fields = []
         if beer_name_val and not is_empty_value(beer_name_val):
             filled_fields.append('beer_name')
         if brewery_val and not is_empty_value(brewery_val):
-            filled_fields.append('brewery')
+            # Нормализуем brewery (удаляем город) перед добавлением в filled_fields
+            # Это критически важно для удаления городов из названий пивоварен
+            from ..normalizers import DataNormalizer
+            normalizer = DataNormalizer()
+            brewery_normalized = normalizer.normalize_brewery(brewery_val)
+            # Обновляем значение в item только если нормализация дала результат
+            if brewery_normalized:
+                item['brewery'] = brewery_normalized
+                filled_fields.append('brewery')
+            else:
+                # Если после нормализации brewery стал пустым, все равно добавляем исходное значение
+                # но логируем это для отладки
+                logger.debug(f"Brewery стал пустым после нормализации: '{brewery_val}'")
+                filled_fields.append('brewery')
         if price_val and not is_empty_value(price_val):
             filled_fields.append('price')
         if style_val and not is_empty_value(style_val):
@@ -1378,6 +2124,10 @@ class ExcelParser(BaseParser):
         if not has_valid_combination:
             logger.debug(f"Пропущена строка без валидной комбинации полей: beer_name={bool(beer_name_val)}, brewery={bool(brewery_val)}, price={bool(price_val)}")
             return None
+        
+        # Удаляем временное поле brewery_original перед возвратом
+        if 'brewery_original' in item:
+            del item['brewery_original']
         
         return item
     

@@ -102,6 +102,12 @@ class DataNormalizer:
                 normalized['format_type']
             )
         
+        # Нормализация пивоварни (удаление города)
+        if 'brewery' in normalized:
+            normalized['brewery'] = self.normalize_brewery(
+                normalized['brewery']
+            )
+        
         return normalized
     
     def normalize_abv(self, abv_value) -> Optional[float]:
@@ -285,4 +291,91 @@ class DataNormalizer:
         
         format_str = str(format_value).lower().strip()
         return self.FORMAT_MAPPING.get(format_str, format_str)
+    
+    def normalize_brewery(self, brewery_value) -> str:
+        """
+        Нормализует название пивоварни, удаляя информацию о городе.
+        
+        Args:
+            brewery_value: Название пивоварни
+            
+        Returns:
+            Очищенное название пивоварни без города
+        """
+        if not brewery_value:
+            return ''
+        
+        brewery_str = str(brewery_value).strip()
+        original_str = brewery_str
+        
+        # Паттерны для удаления города и адреса
+        # Удаляем информацию о городе в различных форматах
+        # Сначала удаляем конкретные города, потом общие паттерны
+        city_patterns = [
+            # Конкретные города (более специфичные паттерны сначала)
+            r'\s*г\.\s*Санкт-Петербург[а-яё]*',
+            r'\s*г\s+Санкт-Петербург[а-яё]*',
+            r'\s*Санкт-Петербург[а-яё]*',
+            r'\s*СПб',
+            r'\s*spb',
+            r'\s*г\.\s*Москв[а-яё]*',
+            r'\s*г\s+Москв[а-яё]*',
+            r'\s*Москв[а-яё]*',
+            r'\s*мск',
+            r'\s*msk',
+            r'\s*г\.\s*Владимир[а-яё]*',
+            r'\s*г\s+Владимир[а-яё]*',
+            r'\s*Владимир[а-яё]*',
+            # Общие паттерны (после конкретных)
+            r'\s*г\.\s*[А-ЯЁа-яё\s-]+',  # "г. Санкт-Петербург", "г. Владимир"
+            r'\s*г\s+[А-ЯЁа-яё\s-]+',  # "г Санкт-Петербург", "г Владимир"
+            r'\s*город\s+[А-ЯЁа-яё\s-]+',  # "город Москва", "город Владимир"
+            r'\s*city\s+[А-ЯЁа-яёA-Za-z\s-]+',  # "city Moscow"
+            r'\s*,\s*г\.\s*[А-ЯЁа-яё\s-]+',  # ", г. Санкт-Петербург", ", г. Владимир"
+            r'\s*,\s*г\s+[А-ЯЁа-яё\s-]+',  # ", г Санкт-Петербург", ", г Владимир"
+            r'\s*,\s*город\s+[А-ЯЁа-яё\s-]+',  # ", город Москва", ", город Владимир"
+            r'\s*,\s*city\s+[А-ЯЁа-яёA-Za-z\s-]+',  # ", city Moscow"
+        ]
+        
+        # Удаляем паттерны города (повторяем несколько раз для надежности)
+        # Используем цикл для удаления всех вхождений
+        max_iterations = 5  # Максимум 5 итераций для предотвращения бесконечного цикла
+        iteration = 0
+        previous_str = brewery_str
+        
+        while iteration < max_iterations:
+            for pattern in city_patterns:
+                brewery_str = re.sub(pattern, '', brewery_str, flags=re.IGNORECASE)
+            
+            # Если строка не изменилась, выходим из цикла
+            if brewery_str == previous_str:
+                break
+            previous_str = brewery_str
+            iteration += 1
+        
+        # Удаляем лишние пробелы и запятые в начале/конце
+        brewery_str = brewery_str.strip().rstrip(',').strip()
+        
+        # Удаляем множественные пробелы
+        brewery_str = re.sub(r'\s+', ' ', brewery_str)
+        
+        # Дополнительная проверка: если после нормализации остался только город или пустая строка
+        # Пытаемся найти название пивоварни до города
+        if not brewery_str or len(brewery_str.strip()) < 2:
+            # Возвращаем исходную строку, но пытаемся удалить только явные паттерны города
+            brewery_str = original_str
+            # Удаляем только явные паттерны "г. Город" в конце строки
+            brewery_str = re.sub(r'\s*г\.\s*[А-ЯЁа-яё]+[а-яё]*\s*$', '', brewery_str, flags=re.IGNORECASE)
+            brewery_str = re.sub(r'\s*г\s+[А-ЯЁа-яё]+[а-яё]*\s*$', '', brewery_str, flags=re.IGNORECASE)
+            brewery_str = brewery_str.strip()
+        
+        # Финальная проверка: если после всех операций остался только город (без других слов)
+        # Проверяем, не является ли вся строка названием города
+        city_names = ['владимир', 'москва', 'санкт-петербург', 'спб', 'мск', 'moscow', 'spb']
+        brewery_lower = brewery_str.lower().strip()
+        if brewery_lower in city_names or brewery_lower.startswith('г.') or brewery_lower.startswith('г '):
+            # Если это только город, возвращаем пустую строку
+            return ''
+        
+        return brewery_str
 

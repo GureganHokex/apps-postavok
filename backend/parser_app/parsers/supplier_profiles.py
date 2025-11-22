@@ -23,13 +23,14 @@ class SupplierProfileDetector:
     Определяет тип поставщика и структуру прайса.
     """
     
-    def detect(self, df: pd.DataFrame, sheet_name: str = None) -> Tuple[SupplierType, Dict]:
+    def detect(self, df: pd.DataFrame, sheet_name: str = None, file_name: str = None) -> Tuple[SupplierType, Dict]:
         """
         Определяет тип поставщика и его характеристики.
         
         Args:
             df: DataFrame с данными
             sheet_name: Имя листа
+            file_name: Имя файла (опционально)
             
         Returns:
             Tuple (тип поставщика, характеристики)
@@ -48,6 +49,12 @@ class SupplierProfileDetector:
                 'single_brewery_name': None,
                 'structure_type': 'unknown'
             }
+            
+            # 1. Анализ имени файла и листа (НОВОЕ)
+            file_name_hints = self._analyze_filename_hints(file_name, sheet_name)
+            if file_name_hints:
+                characteristics.update(file_name_hints)
+                logger.debug(f"Подсказки из имени файла/листа: {file_name_hints}")
             
             # Проверяем наличие отдельной колонки пивоварни (ограничиваем до 5 колонок)
             for col_idx in range(min(5, len(df.columns))):
@@ -109,15 +116,36 @@ class SupplierProfileDetector:
             
             # Определяем тип поставщика
             try:
+                # Приоритет 1: Явные признаки в данных (самый надежный источник)
+                # Если найдено множество пивоварен - это дистрибьютор
                 if characteristics.get('multiple_breweries'):
                     supplier_type = SupplierType.DISTRIBUTOR
+                    logger.info(f"Тип поставщика определен по данным: Дистрибьютор (найдено множество пивоварен)")
+                # Если есть отдельная колонка brewery с множеством значений
+                elif characteristics.get('has_brewery_column'):
+                    supplier_type = self._check_brewery_diversity(df, sample_rows)
+                    if supplier_type == SupplierType.DISTRIBUTOR:
+                        logger.info(f"Тип поставщика определен по колонке brewery: Дистрибьютор")
+                    elif supplier_type == SupplierType.BREWERY:
+                        logger.info(f"Тип поставщика определен по колонке brewery: Пивоварня")
+                # Приоритет 2: Одна пивоварня в данных
                 elif characteristics.get('single_brewery_name'):
                     supplier_type = SupplierType.BREWERY
-                elif characteristics.get('has_brewery_column'):
-                    # Если есть отдельная колонка пивоварни, проверяем разнообразие
-                    supplier_type = self._check_brewery_diversity(df, sample_rows)
+                    logger.info(f"Тип поставщика определен по данным: Пивоварня ({characteristics.get('single_brewery_name')})")
+                # Приоритет 3: Подсказка из имени файла (используется только если данных недостаточно)
                 else:
-                    supplier_type = SupplierType.UNKNOWN
+                    filename_hint = characteristics.get('filename_hint')
+                    if filename_hint == 'distributor':
+                        supplier_type = SupplierType.DISTRIBUTOR
+                        logger.info(f"Тип поставщика определен по имени файла: Дистрибьютор")
+                    elif filename_hint == 'brewery':
+                        supplier_type = SupplierType.BREWERY
+                        # Если нашли название пивоварни в имени файла, используем его
+                        if characteristics.get('filename_brewery'):
+                            characteristics['single_brewery_name'] = characteristics.get('filename_brewery')
+                        logger.info(f"Тип поставщика определен по имени файла: Пивоварня")
+                    else:
+                        supplier_type = SupplierType.UNKNOWN
             except Exception as e:
                 logger.warning(f"Ошибка при определении типа поставщика: {str(e)}", exc_info=True)
                 supplier_type = SupplierType.UNKNOWN
@@ -192,6 +220,74 @@ class SupplierProfileDetector:
         
         return list(breweries)
     
+    def _analyze_filename_hints(self, file_name: str = None, sheet_name: str = None) -> Dict:
+        """
+        Анализирует имя файла и листа на наличие подсказок о типе поставщика.
+        
+        Args:
+            file_name: Имя файла (может быть полный путь или только имя)
+            sheet_name: Имя листа
+            
+        Returns:
+            Словарь с подсказками о типе поставщика
+        """
+        hints = {}
+        text_to_check = ''
+        
+        # Извлекаем только имя файла из пути (если передан полный путь)
+        if file_name:
+            # Берем только имя файла без расширения
+            import os
+            file_basename = os.path.basename(file_name)
+            file_name_only = os.path.splitext(file_basename)[0]
+            text_to_check += ' ' + file_name_only.lower()
+        
+        if sheet_name:
+            text_to_check += ' ' + sheet_name.lower()
+        
+        if not text_to_check:
+            return hints
+        
+        # Ключевые слова для дистрибьютора
+        distributor_keywords = [
+            'дистрибьютор', 'distributor', 'каталог', 'catalog', 
+            'прайс', 'price', 'поставщик', 'supplier', 'оптовый',
+            'wholesale', 'импортер', 'importer', 'дистриб', 'distrib'
+        ]
+        
+        # Ключевые слова для пивоварни (названия известных пивоварен и общие термины)
+        brewery_keywords = [
+            'brewery', 'пивоварня', 'brewing', 'пивоварение',
+            'paradox', 'alisperi', 'back to balance', 'two peaks',
+            'otherlab', 'incider'
+        ]
+        
+        has_distributor_hint = any(kw in text_to_check for kw in distributor_keywords)
+        has_brewery_hint = any(kw in text_to_check for kw in brewery_keywords)
+        
+        if has_distributor_hint and not has_brewery_hint:
+            hints['filename_hint'] = 'distributor'
+            logger.debug(f"Найдена подсказка дистрибьютора в имени файла/листа: {text_to_check}")
+        elif has_brewery_hint:
+            hints['filename_hint'] = 'brewery'
+            logger.debug(f"Найдена подсказка пивоварни в имени файла/листа: {text_to_check}")
+            
+            # Пытаемся извлечь название пивоварни из имени файла
+            # Ищем слова с большой буквы (возможные названия пивоварен)
+            source_text = file_name or sheet_name or ''
+            brewery_match = re.search(r'\b([A-ZА-ЯЁ][a-zа-яё]+(?:\s+[A-ZА-ЯЁ][a-zа-яё]+)?)\b', 
+                                     source_text, re.IGNORECASE)
+            if brewery_match:
+                potential_brewery = brewery_match.group(1)
+                # Проверяем, что это не служебное слово
+                service_words = ['excel', 'xlsx', 'xls', 'sheet', 'лист', 'прайс', 'price', 
+                               'актуальный', 'actual', 'price list', 'прайс-лист']
+                if potential_brewery.lower() not in service_words:
+                    hints['filename_brewery'] = potential_brewery
+                    logger.debug(f"Извлечено название пивоварни из имени файла: {potential_brewery}")
+        
+        return hints
+    
     def _check_brewery_diversity(self, df: pd.DataFrame, sample_rows: pd.DataFrame) -> SupplierType:
         """
         Проверяет разнообразие пивоварен в данных.
@@ -203,19 +299,40 @@ class SupplierProfileDetector:
         Returns:
             Тип поставщика
         """
-        # Ищем колонку с пивоварнями
+        # Ищем колонку с пивоварнями (проверяем больше строк для надежности)
         try:
+            # Увеличиваем размер выборки для анализа
+            analysis_rows = df.head(min(50, len(df)))
+            
             for col_idx in range(min(10, len(df.columns))):
                 try:
-                    if col_idx >= len(sample_rows.columns):
+                    if col_idx >= len(analysis_rows.columns):
                         continue
-                    col_data = sample_rows.iloc[:, col_idx].dropna().astype(str).tolist()
-                    if col_data:
-                        unique_values = set(v.strip() for v in col_data[:20] if v.strip() and v.strip() != '-')
-                        if len(unique_values) > 1:
-                            return SupplierType.DISTRIBUTOR
-                        elif len(unique_values) == 1:
-                            return SupplierType.BREWERY
+                    
+                    # Проверяем заголовок колонки
+                    col_header = str(df.columns[col_idx]).lower() if col_idx < len(df.columns) else ''
+                    brewery_indicators = ['пивоварня', 'brewery', 'производитель', 'manufacturer', 'бренд', 'brand']
+                    is_brewery_column = any(indicator in col_header for indicator in brewery_indicators)
+                    
+                    # Если это колонка brewery или похожая, анализируем содержимое
+                    if is_brewery_column or col_idx == 0:  # Также проверяем первую колонку
+                        col_data = analysis_rows.iloc[:, col_idx].dropna().astype(str).tolist()
+                        if col_data:
+                            # Фильтруем пустые значения и служебные символы
+                            unique_values = set(
+                                v.strip() for v in col_data 
+                                if v.strip() and v.strip().lower() not in ['-', '—', 'nan', 'none', '', 'null']
+                            )
+                            
+                            # Если найдено более 1 уникального значения - это дистрибьютор
+                            if len(unique_values) > 1:
+                                logger.debug(f"Найдено {len(unique_values)} уникальных пивоварен в колонке {col_idx}: {list(unique_values)[:5]}")
+                                return SupplierType.DISTRIBUTOR
+                            # Если только одно значение и оно заполнено - это пивоварня
+                            elif len(unique_values) == 1:
+                                brewery_name = list(unique_values)[0]
+                                logger.debug(f"Найдена одна пивоварня в колонке {col_idx}: {brewery_name}")
+                                return SupplierType.BREWERY
                 except Exception as e:
                     logger.debug(f"Ошибка при проверке колонки {col_idx}: {str(e)}")
                     continue

@@ -23,6 +23,7 @@ export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
   
+  // Используем эндпоинт /api/upload/
   const response = await api.post('/upload/', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',

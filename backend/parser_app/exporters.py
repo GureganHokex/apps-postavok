@@ -447,6 +447,9 @@ class OrderExporter:
         Returns:
             Список словарей с данными позиций
         """
+        from .normalizers import DataNormalizer
+        
+        normalizer = DataNormalizer()
         order_items = []
         
         for order_item in self.order.items:
@@ -455,8 +458,11 @@ class OrderExporter:
             
             try:
                 parsed_item = ParsedItem.objects.get(id=item_id)
+                # Нормализуем brewery (удаляем город) перед добавлением в заказ
+                brewery_normalized = normalizer.normalize_brewery(parsed_item.brewery) if parsed_item.brewery else ''
+                
                 item_data = {
-                    'brewery': parsed_item.brewery,
+                    'brewery': brewery_normalized,
                     'beer_name': parsed_item.beer_name,
                     'style': parsed_item.style,
                     'abv': float(parsed_item.abv) if parsed_item.abv else None,

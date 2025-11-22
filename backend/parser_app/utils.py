@@ -36,7 +36,7 @@ def detect_file_type(filename):
         filename: Имя файла
         
     Returns:
-        Строка с типом файла ('pdf', 'excel', 'zip')
+        Строка с типом файла ('pdf', 'excel', 'zip', 'unknown')
     """
     ext = Path(filename).suffix.lower()
     if ext == '.pdf':
@@ -45,6 +45,7 @@ def detect_file_type(filename):
         return 'excel'
     elif ext == '.zip':
         return 'zip'
+    else:
         return 'unknown'
 
 

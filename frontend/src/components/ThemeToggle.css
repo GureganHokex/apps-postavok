@@ -1,0 +1,25 @@
+/**
+ * Стили для переключателя темы
+ */
+
+.theme-toggle {
+  background: none;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: var(--font-xl);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-base);
+  background-color: var(--bg-primary);
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-tertiary);
+  transform: rotate(15deg);
+}
+

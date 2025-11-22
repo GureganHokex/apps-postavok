@@ -1,0 +1,98 @@
+/**
+ * Стили для компонента массовых операций
+ */
+
+.BulkActions {
+  margin-bottom: var(--spacing-md);
+}
+
+.BulkActions .bulk-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: white;
+}
+
+.BulkActions .bulk-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.BulkActions .bulk-count {
+  font-weight: 600;
+  font-size: var(--font-lg);
+}
+
+.BulkActions .bulk-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.BulkActions .bulk-buttons button {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.BulkActions .bulk-buttons button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.BulkActions .bulk-update-form,
+.BulkActions .bulk-delete-confirm {
+  padding: var(--spacing-lg);
+  background-color: var(--bg-primary);
+  border: 2px solid var(--primary-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.BulkActions .bulk-update-form h3,
+.BulkActions .bulk-delete-confirm h3 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+}
+
+.BulkActions .form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.BulkActions .form-group label {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.BulkActions .price-change-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.BulkActions .price-change-controls select {
+  flex: 0 0 200px;
+}
+
+.BulkActions .price-change-controls input {
+  flex: 1;
+}
+
+.BulkActions .form-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+
+.BulkActions .bulk-delete-confirm p {
+  margin-bottom: var(--spacing-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+}
+

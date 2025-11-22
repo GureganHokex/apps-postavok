@@ -107,9 +107,6 @@ function SearchInput({
               const displayValue = typeof suggestion === 'string' 
                 ? suggestion 
                 : suggestion.label;
-              const suggestionValue = typeof suggestion === 'string'
-                ? suggestion
-                : suggestion.value;
               
               return (
                 <motion.li

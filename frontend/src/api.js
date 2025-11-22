@@ -127,5 +127,66 @@ export const downloadOrder = async (orderId) => {
   window.URL.revokeObjectURL(url);
 };
 
+/**
+ * Получает список всех заказов.
+ * 
+ * @param {Object} filters - Фильтры поиска
+ * @returns {Promise} Promise со списком заказов
+ */
+export const getOrders = async (filters = {}) => {
+  const response = await api.get('/orders/', { params: filters });
+  return response.data;
+};
+
+/**
+ * Получает детали заказа.
+ * 
+ * @param {number} orderId - ID заказа
+ * @returns {Promise} Promise с данными заказа
+ */
+export const getOrder = async (orderId) => {
+  const response = await api.get(`/orders/${orderId}/`);
+  return response.data;
+};
+
+/**
+ * Удаляет позицию.
+ * 
+ * @param {number} itemId - ID позиции
+ * @returns {Promise} Promise с результатом удаления
+ */
+export const deleteItem = async (itemId) => {
+  const response = await api.delete(`/items/${itemId}/`);
+  return response.data;
+};
+
+/**
+ * Массовое обновление позиций.
+ * 
+ * @param {Array} itemIds - Массив ID позиций
+ * @param {Object} data - Данные для обновления
+ * @returns {Promise} Promise с результатами обновления
+ */
+export const bulkUpdateItems = async (itemIds, data) => {
+  const response = await api.patch('/items/bulk_update/', {
+    item_ids: itemIds,
+    data: data,
+  });
+  return response.data;
+};
+
+/**
+ * Массовое удаление позиций.
+ * 
+ * @param {Array} itemIds - Массив ID позиций
+ * @returns {Promise} Promise с результатами удаления
+ */
+export const bulkDeleteItems = async (itemIds) => {
+  const response = await api.post('/items/bulk_delete/', {
+    item_ids: itemIds,
+  });
+  return response.data;
+};
+
 export default api;
 

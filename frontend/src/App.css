@@ -11,8 +11,19 @@
   background: linear-gradient(135deg, var(--text-primary) 0%, #34495e 100%);
   color: white;
   padding: var(--spacing-xl);
-  text-align: center;
   box-shadow: var(--shadow-md);
+}
+
+.App-header .header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.App-header > div:first-child {
+  text-align: left;
 }
 
 .App-header h1 {

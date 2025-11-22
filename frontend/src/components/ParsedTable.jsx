@@ -7,9 +7,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getFileItems, updateItem, getFileSheets } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { retry, handleApiError } from '../utils/errorHandler';
+import { getSettings, saveSettings } from '../utils/settings';
 import SearchInput from './SearchInput';
 import ExportButton from './ExportButton';
+import BulkActions from './BulkActions';
+import ContextMenu from './ContextMenu';
 import './ParsedTable.css';
 
 const ParsedTable = memo(function ParsedTable({
@@ -33,12 +38,19 @@ const ParsedTable = memo(function ParsedTable({
     beer_name: '',
     style: '',
   });
-  const [activeFilters, setActiveFilters] = useState({
+  const [savedFilters, setSavedFilters] = useLocalStorage('table_filters', {
     brewery: '',
     beer_name: '',
     style: '',
   });
+  const [activeFilters, setActiveFilters] = useState(savedFilters);
   const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, item: null });
+  
+  // Сохраняем фильтры при изменении
+  useEffect(() => {
+    setSavedFilters(activeFilters);
+  }, [activeFilters, setSavedFilters]);
   
   // Генерируем предложения для автодополнения из текущих данных
   const searchSuggestions = useMemo(() => {
@@ -87,6 +99,40 @@ const ParsedTable = memo(function ParsedTable({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedTempFilters]);
+
+  // Клавиатурные сокращения
+  useKeyboardShortcuts([
+    {
+      keys: 'ctrl+f',
+      handler: () => {
+        // Фокус на поиск
+        const searchInput = document.querySelector('.search-input');
+        if (searchInput) searchInput.focus();
+      },
+    },
+    {
+      keys: 'ctrl+s',
+      handler: () => {
+        // Сохранить текущее редактирование
+        if (editingId) {
+          handleSave(editingId);
+        }
+      },
+    },
+    {
+      keys: 'escape',
+      handler: () => {
+        // Отменить редактирование
+        if (editingId) {
+          handleCancel();
+        }
+        // Закрыть контекстное меню
+        if (contextMenu.show) {
+          setContextMenu({ show: false, x: 0, y: 0, item: null });
+        }
+      },
+    },
+  ]);
 
 
   const loadItems = useCallback(async () => {
@@ -328,6 +374,17 @@ const ParsedTable = memo(function ParsedTable({
               </div>
             </motion.div>
 
+            {selectedItems.length > 0 && (
+              <BulkActions
+                selectedItems={selectedItems}
+                onSuccess={() => {
+                  loadItems();
+                  onDeselectAll();
+                }}
+                onCancel={onDeselectAll}
+              />
+            )}
+
             <div className="table-actions">
               <div className="table-actions-left">
                 <label>
@@ -386,6 +443,15 @@ const ParsedTable = memo(function ParsedTable({
                         animate={{ opacity: 1 }}
                         transition={{ delay: index * 0.02 }}
                         className={editingId === item.id ? 'editing' : selectedItems.includes(item.id) ? 'selected' : ''}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setContextMenu({
+                            show: true,
+                            x: e.clientX,
+                            y: e.clientY,
+                            item: item,
+                          });
+                        }}
                       >
                         <td>
                           <input
@@ -547,6 +613,52 @@ const ParsedTable = memo(function ParsedTable({
 
         {sheets.length === 0 && !loading && (
           <div className="empty">Загрузка листов...</div>
+        )}
+
+        {contextMenu.show && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={[
+              {
+                label: 'Редактировать',
+                icon: '✏️',
+                onClick: () => handleEdit(contextMenu.item),
+                shortcut: 'Enter',
+              },
+              {
+                label: selectedItems.includes(contextMenu.item.id) ? 'Снять выбор' : 'Выбрать',
+                icon: selectedItems.includes(contextMenu.item.id) ? '☐' : '☑️',
+                onClick: () => handleCheckboxChange(contextMenu.item.id, !selectedItems.includes(contextMenu.item.id)),
+                shortcut: 'Space',
+              },
+              {
+                label: 'Копировать название',
+                icon: '📋',
+                onClick: () => {
+                  navigator.clipboard.writeText(contextMenu.item.beer_name || '');
+                  toast.success('Название скопировано');
+                },
+              },
+              {
+                label: 'Экспортировать',
+                icon: '📥',
+                onClick: () => {
+                  // Экспорт одной позиции
+                  const exportData = [contextMenu.item];
+                  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `item_${contextMenu.item.id}.json`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('Позиция экспортирована');
+                },
+              },
+            ]}
+            onClose={() => setContextMenu({ show: false, x: 0, y: 0, item: null })}
+          />
         )}
       </div>
     </div>

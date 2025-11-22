@@ -3,13 +3,16 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getFileItems, createOrder, downloadOrder } from '../api';
 import { quantitySchema } from '../utils/validation';
+import DraggableOrderItem from './DraggableOrderItem';
 import './OrderForm.css';
 
-const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
+const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems, items }) {
   const [orderItems, setOrderItems] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [loading, setLoading] = useState(false);
@@ -242,58 +245,26 @@ const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {orderItems.map((item, index) => {
-                    const qty = quantities[item.id] || 0;
-                    const price = parseFloat(item.price) || 0;
-                    const sum = qty * price;
-
-                    return (
-                      <motion.tr
-                        key={item.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                      >
-                        <td>{item.brewery || '-'}</td>
-                        <td>{item.beer_name || '-'}</td>
-                        <td>{item.style || '-'}</td>
-                        <td>{item.price || '-'}</td>
-                        <td>{item.currency || '-'}</td>
-                        <td>{item.volume || '-'}</td>
-                        <td>{item.format_type || '-'}</td>
-                        <td>
-                          <div className="quantity-input-wrapper">
-                            <input
-                              type="number"
-                              min="0"
-                              max="10000"
-                              value={qty}
-                              onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                              className={`input input-small ${quantityErrors[item.id] ? 'input-error' : ''}`}
-                              aria-label={`Количество для ${item.beer_name || item.id}`}
-                            />
-                            {quantityErrors[item.id] && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="input-error-message"
-                              >
-                                {quantityErrors[item.id]}
-                              </motion.div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="sum">{sum.toFixed(2)}</td>
-                      </motion.tr>
-                    );
-                  })}
+                  {orderItems.map((item, index) => (
+                    <DraggableOrderItem
+                      key={item.id}
+                      item={item}
+                      index={index}
+                      quantity={quantities[item.id] || 0}
+                      quantityErrors={quantityErrors}
+                      onQuantityChange={handleQuantityChange}
+                    />
+                  ))}
                 </tbody>
                 <tfoot>
-                  <tr>
+                  <motion.tr
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
                     <td colSpan="7" className="total-label">Итого:</td>
                     <td className="total-value">{totalItems}</td>
                     <td className="total-value">{totalPrice.toFixed(2)} ₽</td>
-                  </tr>
+                  </motion.tr>
                 </tfoot>
               </table>
             </div>
@@ -321,6 +292,14 @@ const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
         )}
       </div>
     </div>
+  );
+});
+
+const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <OrderFormContent fileId={fileId} selectedItems={selectedItems} items={items} />
+    </DndProvider>
   );
 });
 

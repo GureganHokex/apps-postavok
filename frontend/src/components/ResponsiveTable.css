@@ -1,0 +1,78 @@
+/**
+ * Адаптивные стили для таблиц на мобильных устройствах
+ */
+
+@media (max-width: 768px) {
+  .ParsedTable .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ParsedTable .table {
+    min-width: 800px;
+  }
+
+  .ParsedTable .filters {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ParsedTable .filter-inputs {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .ParsedTable .table-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ParsedTable .table-actions-left,
+  .ParsedTable .table-actions-right {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .ParsedTable .table-actions-right button {
+    width: 100%;
+  }
+
+  .ParsedTable .search-section {
+    flex-direction: column;
+  }
+
+  .ParsedTable .search-input-wrapper {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .ParsedTable .card {
+    padding: 1rem;
+  }
+
+  .ParsedTable .sheets-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .ParsedTable .sheet-tab {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  .ParsedTable .table th,
+  .ParsedTable .table td {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .ParsedTable .button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+

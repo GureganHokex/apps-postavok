@@ -245,6 +245,70 @@ class ParsedItemViewSet(viewsets.ModelViewSet):
     
     queryset = ParsedItem.objects.all()
     serializer_class = ParsedItemSerializer
+    
+    @action(detail=False, methods=['patch'])
+    def bulk_update(self, request):
+        """
+        Массовое обновление позиций.
+        
+        PATCH /api/items/bulk_update/
+        Body: {
+            "item_ids": [1, 2, 3],
+            "data": {"price": 100, "currency": "RUB"}
+        }
+        """
+        item_ids = request.data.get('item_ids', [])
+        update_data = request.data.get('data', {})
+        
+        if not item_ids:
+            return Response(
+                {'error': 'Не указаны ID позиций'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            updated_count = ParsedItem.objects.filter(id__in=item_ids).update(**update_data)
+            return Response({
+                'updated_count': updated_count,
+                'message': f'Обновлено позиций: {updated_count}'
+            })
+        except Exception as e:
+            logger.error(f"Ошибка массового обновления: {str(e)}", exc_info=True)
+            return Response(
+                {'error': f'Ошибка обновления: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """
+        Массовое удаление позиций.
+        
+        POST /api/items/bulk_delete/
+        Body: {
+            "item_ids": [1, 2, 3]
+        }
+        """
+        item_ids = request.data.get('item_ids', [])
+        
+        if not item_ids:
+            return Response(
+                {'error': 'Не указаны ID позиций'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            deleted_count, _ = ParsedItem.objects.filter(id__in=item_ids).delete()
+            return Response({
+                'deleted_count': deleted_count,
+                'message': f'Удалено позиций: {deleted_count}'
+            })
+        except Exception as e:
+            logger.error(f"Ошибка массового удаления: {str(e)}", exc_info=True)
+            return Response(
+                {'error': f'Ошибка удаления: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class OrderViewSet(viewsets.ModelViewSet):

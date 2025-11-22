@@ -4,61 +4,85 @@
 
 .App {
   min-height: 100vh;
-  background-color: #f5f5f5;
+  background-color: var(--bg-secondary);
 }
 
 .App-header {
-  background-color: #2c3e50;
+  background: linear-gradient(135deg, var(--text-primary) 0%, #34495e 100%);
   color: white;
-  padding: 2rem;
-  text-align: center;
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.App-header .header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.App-header > div:first-child {
+  text-align: left;
 }
 
 .App-header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: var(--font-3xl);
+  font-weight: 700;
+  letter-spacing: -0.5px;
 }
 
 .App-header p {
-  margin: 0.5rem 0 0 0;
+  margin: var(--spacing-sm) 0 0 0;
   opacity: 0.9;
+  font-size: var(--font-lg);
 }
 
 .App-nav {
   display: flex;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem;
-  background-color: white;
-  border-bottom: 1px solid #ddd;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-bottom: 2px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .App-nav button {
-  padding: 0.5rem 1.5rem;
+  padding: var(--spacing-sm) var(--spacing-lg);
   border: none;
   background-color: transparent;
   cursor: pointer;
-  font-size: 1rem;
-  color: #666;
-  border-bottom: 2px solid transparent;
-  transition: all 0.3s;
+  font-size: var(--font-base);
+  color: var(--text-secondary);
+  border-bottom: 3px solid transparent;
+  transition: var(--transition-base);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-weight: 500;
+  position: relative;
 }
 
 .App-nav button:hover {
-  color: #2c3e50;
-  border-bottom-color: #2c3e50;
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
 }
 
 .App-nav button.active {
-  color: #2c3e50;
-  border-bottom-color: #3498db;
-  font-weight: bold;
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 600;
+  background-color: var(--bg-tertiary);
 }
 
 .App-main {
   width: 100%;
-  margin: 2rem 0;
-  padding: 0 1rem;
+  max-width: 1600px;
+  margin: var(--spacing-xl) auto;
+  padding: 0 var(--spacing-md);
 }
 
 /* Для вкладки с позициями - используем всю ширину без отступов */
@@ -70,104 +94,189 @@
 
 /* Общие стили для компонентов */
 .card {
-  background: white;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-md);
+  transition: var(--transition-base);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
 }
 
 .button {
-  padding: 0.5rem 1.5rem;
+  padding: var(--spacing-sm) var(--spacing-lg);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s;
+  font-size: var(--font-base);
+  font-weight: 500;
+  transition: var(--transition-base);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  box-shadow: var(--shadow-sm);
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .button-primary {
-  background-color: #3498db;
+  background-color: var(--primary-color);
   color: white;
 }
 
-.button-primary:hover {
-  background-color: #2980b9;
+.button-primary:hover:not(:disabled) {
+  background-color: var(--primary-hover);
 }
 
 .button-success {
-  background-color: #27ae60;
+  background-color: var(--success-color);
   color: white;
 }
 
-.button-success:hover {
-  background-color: #229954;
+.button-success:hover:not(:disabled) {
+  background-color: var(--success-hover);
 }
 
 .button-danger {
-  background-color: #e74c3c;
+  background-color: var(--danger-color);
   color: white;
 }
 
-.button-danger:hover {
-  background-color: #c0392b;
+.button-danger:hover:not(:disabled) {
+  background-color: var(--danger-hover);
 }
 
 .input {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-base);
   width: 100%;
+  transition: var(--transition-base);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .input:focus {
   outline: none;
-  border-color: #3498db;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
+  margin-top: var(--spacing-md);
+  background-color: var(--bg-primary);
 }
 
 .table th,
 .table td {
-  padding: 0.75rem;
+  padding: var(--spacing-md);
   text-align: left;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .table th {
-  background-color: #f8f9fa;
-  font-weight: bold;
-  color: #2c3e50;
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-size: var(--font-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.table tr:hover {
-  background-color: #f8f9fa;
+.table tbody tr {
+  transition: var(--transition-fast);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.table tbody tr.selected {
+  background-color: rgba(52, 152, 219, 0.1);
 }
 
 .loading {
   text-align: center;
-  padding: 2rem;
-  color: #666;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+}
+
+.loading::after {
+  content: '...';
+  animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
 }
 
 .error {
   background-color: #fee;
   color: #c33;
-  padding: 1rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-sm);
+  margin: var(--spacing-md) 0;
+  border-left: 4px solid var(--danger-color);
 }
 
 .success {
   background-color: #efe;
   color: #3c3;
-  padding: 1rem;
-  border-radius: 4px;
-  margin: 1rem 0;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-sm);
+  margin: var(--spacing-md) 0;
+  border-left: 4px solid var(--success-color);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .App-main {
+    padding: 0 var(--spacing-sm);
+    margin: var(--spacing-md) 0;
+  }
+  
+  .App-nav {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+  
+  .App-nav button {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .card {
+    padding: var(--spacing-md);
+  }
 }
 

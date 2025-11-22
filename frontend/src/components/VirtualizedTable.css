@@ -1,0 +1,66 @@
+/**
+ * Стили для виртуализированной таблицы
+ */
+
+.virtualized-table-container {
+  width: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+.virtualized-header {
+  display: flex;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: var(--shadow-sm);
+}
+
+.virtualized-header-cell {
+  padding: var(--spacing-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-right: 1px solid var(--border-color);
+}
+
+.virtualized-header-cell:last-child {
+  border-right: none;
+}
+
+.virtualized-row {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  transition: var(--transition-fast);
+  cursor: pointer;
+}
+
+.virtualized-row:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.virtualized-row.selected {
+  background-color: rgba(52, 152, 219, 0.1);
+  border-left: 3px solid var(--primary-color);
+}
+
+.virtualized-cell {
+  padding: var(--spacing-md);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtualized-cell:last-child {
+  border-right: none;
+}
+

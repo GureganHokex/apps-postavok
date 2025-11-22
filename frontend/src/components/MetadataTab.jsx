@@ -2,10 +2,10 @@
  * Компонент для отображения метаданных файла.
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import './MetadataTab.css';
 
-function MetadataTab({ metadata }) {
+const MetadataTab = memo(function MetadataTab({ metadata }) {
   if (!metadata) {
     return <div className="loading">Метаданные не загружены</div>;
   }
@@ -129,7 +129,7 @@ function MetadataTab({ metadata }) {
       </div>
     </div>
   );
-}
+});
 
 export default MetadataTab;
 

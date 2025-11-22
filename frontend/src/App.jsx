@@ -2,12 +2,26 @@
  * Главный компонент приложения.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Toaster } from 'react-hot-toast';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import FileUpload from './components/FileUpload';
 import ParsedTable from './components/ParsedTable';
 import MetadataTab from './components/MetadataTab';
 import OrderForm from './components/OrderForm';
 import './App.css';
+
+// Настройка React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 минут
+    },
+  },
+});
 
 function App() {
   const [currentFile, setCurrentFile] = useState(null);
@@ -27,95 +41,180 @@ function App() {
     setActiveTab('items');
   };
 
-  const handleItemSelect = (itemId, isSelected) => {
-    if (isSelected) {
-      setSelectedItems([...selectedItems, itemId]);
-    } else {
-      setSelectedItems(selectedItems.filter(id => id !== itemId));
-    }
-  };
+  const handleItemSelect = useCallback((itemId, isSelected) => {
+    setSelectedItems(prev => {
+      if (isSelected) {
+        return [...prev, itemId];
+      } else {
+        return prev.filter(id => id !== itemId);
+      }
+    });
+  }, []);
 
-  const handleSelectAll = (allItemIds) => {
+  const handleSelectAll = useCallback((allItemIds) => {
     setSelectedItems(allItemIds);
-  };
+  }, []);
 
-  const handleDeselectAll = () => {
+  const handleDeselectAll = useCallback(() => {
     setSelectedItems([]);
-  };
+  }, []);
+
+  const selectedCount = useMemo(() => selectedItems.length, [selectedItems]);
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Пивной импортер</h1>
-        <p>Парсинг прайсов для баров</p>
-      </header>
-
-      <nav className="App-nav">
-        <button
-          className={activeTab === 'upload' ? 'active' : ''}
-          onClick={() => setActiveTab('upload')}
+    <QueryClientProvider client={queryClient}>
+      <div className="App">
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              boxShadow: 'var(--shadow-lg)',
+              borderRadius: 'var(--radius-md)',
+            },
+            success: {
+              iconTheme: {
+                primary: 'var(--success-color)',
+                secondary: 'white',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: 'var(--danger-color)',
+                secondary: 'white',
+              },
+            },
+          }}
+        />
+        
+      <motion.header
+        className="App-header"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <motion.h1
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
         >
-          Загрузка файлов
-        </button>
-        {currentFile && (
-          <>
-            <button
-              className={activeTab === 'items' ? 'active' : ''}
-              onClick={() => setActiveTab('items')}
-            >
-              Позиции ({items.length})
-            </button>
-            <button
-              className={activeTab === 'metadata' ? 'active' : ''}
-              onClick={() => setActiveTab('metadata')}
-            >
-              Метаданные
-            </button>
-            <button
-              className={activeTab === 'order' ? 'active' : ''}
-              onClick={() => setActiveTab('order')}
-            >
-              Формирование заказа
-            </button>
-          </>
-        )}
-      </nav>
+          Пивной импортер
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.9 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+        >
+          Парсинг прайсов для баров
+        </motion.p>
+      </motion.header>
+
+        <nav className="App-nav">
+          <button
+            className={activeTab === 'upload' ? 'active' : ''}
+            onClick={() => setActiveTab('upload')}
+            aria-label="Загрузка файлов"
+          >
+            📤 Загрузка файлов
+          </button>
+          {currentFile && (
+            <>
+              <button
+                className={activeTab === 'items' ? 'active' : ''}
+                onClick={() => setActiveTab('items')}
+                aria-label="Позиции"
+              >
+                📋 Позиции {items.length > 0 && `(${items.length})`}
+              </button>
+              <button
+                className={activeTab === 'metadata' ? 'active' : ''}
+                onClick={() => setActiveTab('metadata')}
+                aria-label="Метаданные"
+              >
+                ℹ️ Метаданные
+              </button>
+              <button
+                className={activeTab === 'order' ? 'active' : ''}
+                onClick={() => setActiveTab('order')}
+                aria-label="Формирование заказа"
+              >
+                🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
+              </button>
+            </>
+          )}
+        </nav>
 
       <main className="App-main">
-        {activeTab === 'upload' && (
-          <FileUpload
-            onFileUploaded={handleFileUploaded}
-            onParseComplete={handleParseComplete}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {activeTab === 'upload' && (
+            <motion.div
+              key="upload"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <FileUpload
+                onFileUploaded={handleFileUploaded}
+                onParseComplete={handleParseComplete}
+              />
+            </motion.div>
+          )}
 
-        {activeTab === 'items' && currentFile && (
-          <div className="items-full-width">
-            <ParsedTable
-              fileId={currentFile.id}
-              items={items}
-              onItemsUpdate={setItems}
-              onItemSelect={handleItemSelect}
-              selectedItems={selectedItems}
-              onSelectAll={handleSelectAll}
-              onDeselectAll={handleDeselectAll}
-            />
-          </div>
-        )}
+          {activeTab === 'items' && currentFile && (
+            <motion.div
+              key="items"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="items-full-width"
+            >
+              <ParsedTable
+                fileId={currentFile.id}
+                items={items}
+                onItemsUpdate={setItems}
+                onItemSelect={handleItemSelect}
+                selectedItems={selectedItems}
+                onSelectAll={handleSelectAll}
+                onDeselectAll={handleDeselectAll}
+              />
+            </motion.div>
+          )}
 
-        {activeTab === 'metadata' && currentFile && metadata && (
-          <MetadataTab metadata={metadata} />
-        )}
+          {activeTab === 'metadata' && currentFile && metadata && (
+            <motion.div
+              key="metadata"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <MetadataTab metadata={metadata} />
+            </motion.div>
+          )}
 
-        {activeTab === 'order' && currentFile && (
-          <OrderForm
-            fileId={currentFile.id}
-            selectedItems={selectedItems}
-            items={items}
-          />
-        )}
+          {activeTab === 'order' && currentFile && (
+            <motion.div
+              key="order"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <OrderForm
+                fileId={currentFile.id}
+                selectedItems={selectedItems}
+                items={items}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
-    </div>
+      </div>
+    </QueryClientProvider>
   );
 }
 

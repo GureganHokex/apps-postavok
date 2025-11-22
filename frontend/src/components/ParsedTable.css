@@ -4,36 +4,41 @@
 
 .ParsedTable .sheets-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 0.5rem;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: var(--spacing-sm);
   flex-wrap: wrap;
+  overflow-x: auto;
 }
 
 .ParsedTable .sheet-tab {
-  padding: 0.75rem 1.5rem;
+  padding: var(--spacing-md) var(--spacing-lg);
   border: none;
-  background-color: #f5f5f5;
-  color: #666;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 1rem;
-  border-radius: 4px 4px 0 0;
-  transition: all 0.3s;
+  font-size: var(--font-base);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: var(--transition-base);
   border-bottom: 3px solid transparent;
   margin-bottom: -2px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .ParsedTable .sheet-tab:hover {
-  background-color: #e8e8e8;
-  color: #2c3e50;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transform: translateY(-2px);
 }
 
 .ParsedTable .sheet-tab.active {
-  background-color: white;
-  color: #2c3e50;
-  font-weight: bold;
-  border-bottom-color: #3498db;
+  background-color: var(--bg-primary);
+  color: var(--primary-color);
+  font-weight: 600;
+  border-bottom-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .ParsedTable .card {
@@ -46,18 +51,33 @@
 
 .ParsedTable .filters {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.ParsedTable .search-section {
+  width: 100%;
+}
+
+.ParsedTable .filter-inputs {
+  display: flex;
+  gap: var(--spacing-md);
   align-items: center;
   flex-wrap: wrap;
 }
 
-.ParsedTable .filters input {
+.ParsedTable .filter-inputs input {
   flex: 1;
   min-width: 150px;
+  max-width: 300px;
 }
 
-.ParsedTable .filters button {
+.ParsedTable .filter-inputs button {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -66,21 +86,57 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.ParsedTable .table-actions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.ParsedTable .table-actions-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.ParsedTable .table-actions label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.ParsedTable .table-actions input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+  accent-color: var(--primary-color);
 }
 
 .ParsedTable .selected-count {
-  font-weight: bold;
-  color: #3498db;
+  font-weight: 600;
+  color: var(--primary-color);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background-color: rgba(52, 152, 219, 0.1);
+  border-radius: var(--radius-sm);
 }
 
 .ParsedTable .selected-count-total {
-  font-weight: bold;
-  color: #2c3e50;
-  margin-left: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background-color: rgba(44, 62, 80, 0.1);
+  border-radius: var(--radius-sm);
 }
 
 .ParsedTable .description-cell {
@@ -91,15 +147,42 @@
 .ParsedTable .description-text {
   max-height: 100px;
   overflow-y: auto;
-  font-size: 0.9em;
-  line-height: 1.4;
-  color: #555;
-  padding: 0.25rem;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.ParsedTable .description-text:hover {
+  background-color: var(--bg-tertiary);
 }
 
 .ParsedTable .table-container {
   overflow-x: auto;
   width: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.ParsedTable .table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ParsedTable .table-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.ParsedTable .table-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.ParsedTable .table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .ParsedTable .table {
@@ -109,13 +192,120 @@
 
 .ParsedTable .input-small {
   width: 100%;
-  padding: 0.25rem;
-  font-size: 0.875rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-sm);
 }
 
 .ParsedTable .empty {
   text-align: center;
-  padding: 2rem;
-  color: #999;
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+}
+
+.ParsedTable .loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  gap: var(--spacing-md);
+}
+
+.ParsedTable .loading-container .loading-spinner {
+  position: relative;
+  width: 50px;
+  height: 50px;
+}
+
+.ParsedTable .loading-container .spinner-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 3px solid transparent;
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.ParsedTable .loading-container .spinner-ring:nth-child(2) {
+  animation-delay: 0.2s;
+  border-top-color: var(--success-color);
+  width: 80%;
+  height: 80%;
+  top: 10%;
+  left: 10%;
+}
+
+.ParsedTable .loading-container .spinner-ring:nth-child(3) {
+  animation-delay: 0.4s;
+  border-top-color: var(--info-color);
+  width: 60%;
+  height: 60%;
+  top: 20%;
+  left: 20%;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.ParsedTable .loading-container p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+  font-weight: 500;
+}
+
+/* Улучшенные стили для редактирования */
+.ParsedTable .table tbody tr.editing {
+  background-color: rgba(52, 152, 219, 0.05);
+  box-shadow: inset 0 0 0 2px var(--primary-color);
+}
+
+.ParsedTable .table tbody tr.editing td {
+  padding: var(--spacing-sm);
+}
+
+.ParsedTable .table tbody tr.selected {
+  background-color: rgba(52, 152, 219, 0.08);
+}
+
+.ParsedTable .editing-cell {
+  padding: var(--spacing-xs) !important;
+}
+
+.ParsedTable .editing-cell input {
+  margin: 0;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .ParsedTable .filters {
+    flex-direction: column;
+  }
+  
+  .ParsedTable .filters input {
+    max-width: 100%;
+  }
+  
+  .ParsedTable .table-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .ParsedTable .table-container {
+    font-size: var(--font-sm);
+  }
+  
+  .ParsedTable .table th,
+  .ParsedTable .table td {
+    padding: var(--spacing-sm);
+  }
 }
 

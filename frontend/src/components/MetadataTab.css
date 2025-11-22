@@ -3,9 +3,9 @@
  */
 
 .MetadataTab .metadata-section {
-  margin-bottom: 2rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid #eee;
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 2px solid var(--border-color);
 }
 
 .MetadataTab .metadata-section:last-child {
@@ -14,42 +14,57 @@
 
 .MetadataTab .metadata-section h3 {
   margin-top: 0;
-  color: #2c3e50;
+  color: var(--text-primary);
+  font-size: var(--font-xl);
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
 }
 
 .MetadataTab .summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
 .MetadataTab .summary-item {
   display: flex;
   flex-direction: column;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-radius: 4px;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-base);
+}
+
+.MetadataTab .summary-item:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .MetadataTab .summary-item .label {
-  font-size: 0.875rem;
-  color: #666;
-  margin-bottom: 0.5rem;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
 }
 
 .MetadataTab .summary-item .value {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #3498db;
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
 .MetadataTab .contact-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-lg);
 }
 
 .MetadataTab .contact-group h4 {
-  margin-bottom: 0.5rem;
-  color: #555;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  font-weight: 600;
 }
 
 .MetadataTab .contact-group ul {
@@ -59,18 +74,29 @@
 }
 
 .MetadataTab .contact-group li {
-  padding: 0.5rem;
-  background-color: #f8f9fa;
-  margin-bottom: 0.5rem;
-  border-radius: 4px;
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  margin-bottom: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  border-left: 3px solid transparent;
+}
+
+.MetadataTab .contact-group li:hover {
+  background-color: var(--bg-primary);
+  border-left-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .MetadataTab .contact-group a {
-  color: #3498db;
+  color: var(--primary-color);
   text-decoration: none;
+  font-weight: 500;
+  transition: var(--transition-fast);
 }
 
 .MetadataTab .contact-group a:hover {
+  color: var(--primary-hover);
   text-decoration: underline;
 }
 
@@ -80,15 +106,30 @@
 }
 
 .MetadataTab .extra-text-list li {
-  padding: 0.75rem;
-  background-color: #fff3cd;
-  margin-bottom: 0.5rem;
-  border-left: 3px solid #ffc107;
-  border-radius: 4px;
+  padding: var(--spacing-md);
+  background-color: rgba(243, 156, 18, 0.1);
+  margin-bottom: var(--spacing-sm);
+  border-left: 4px solid var(--warning-color);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.MetadataTab .extra-text-list li:hover {
+  background-color: rgba(243, 156, 18, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 .MetadataTab .empty {
-  color: #999;
+  color: var(--text-muted);
   font-style: italic;
+  padding: var(--spacing-md);
+  text-align: center;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .MetadataTab .summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 

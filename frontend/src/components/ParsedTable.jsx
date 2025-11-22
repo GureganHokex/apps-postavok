@@ -2,11 +2,17 @@
  * Компонент для отображения таблицы распарсенных позиций.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { getFileItems, updateItem, getFileSheets } from '../api';
+import { useDebounce } from '../hooks/useDebounce';
+import { retry, handleApiError } from '../utils/errorHandler';
+import SearchInput from './SearchInput';
+import ExportButton from './ExportButton';
 import './ParsedTable.css';
 
-function ParsedTable({
+const ParsedTable = memo(function ParsedTable({
   fileId,
   items: initialItems,
   onItemsUpdate,
@@ -32,18 +38,23 @@ function ParsedTable({
     beer_name: '',
     style: '',
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Генерируем предложения для автодополнения из текущих данных
+  const searchSuggestions = useMemo(() => {
+    const suggestions = new Set();
+    items.forEach(item => {
+      if (item.brewery) suggestions.add(item.brewery);
+      if (item.beer_name) suggestions.add(item.beer_name);
+      if (item.style) suggestions.add(item.style);
+    });
+    return Array.from(suggestions);
+  }, [items]);
 
-  useEffect(() => {
-    loadSheets();
-  }, [fileId]);
+  // Debounce фильтров для оптимизации
+  const debouncedTempFilters = useDebounce(tempFilters, 500);
 
-  useEffect(() => {
-    if (selectedSheet !== null) {
-      loadItems();
-    }
-  }, [fileId, activeFilters, selectedSheet]);
-
-  const loadSheets = async () => {
+  const loadSheets = useCallback(async () => {
     try {
       const data = await getFileSheets(fileId);
       setSheets(data.sheets || []);
@@ -52,34 +63,75 @@ function ParsedTable({
         setSelectedSheet(data.sheets[0].name);
       }
     } catch (err) {
-      setError(`Ошибка загрузки листов: ${err.message}`);
+      const errorMsg = `Ошибка загрузки листов: ${err.message}`;
+      toast.error(errorMsg);
+      setError(errorMsg);
     }
-  };
+  }, [fileId, selectedSheet]);
 
-  const loadItems = async () => {
+  useEffect(() => {
+    loadSheets();
+  }, [loadSheets]);
+
+  useEffect(() => {
+    if (selectedSheet !== null) {
+      loadItems();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, activeFilters, selectedSheet]);
+
+  // Автоматически применяем фильтры после debounce
+  useEffect(() => {
+    if (JSON.stringify(debouncedTempFilters) !== JSON.stringify(activeFilters)) {
+      setActiveFilters(debouncedTempFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedTempFilters]);
+
+
+  const loadItems = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const filters = { ...activeFilters };
       if (selectedSheet) {
         filters.sheet = selectedSheet;
       }
-      const data = await getFileItems(fileId, filters);
+      
+      const data = await retry(
+        () => getFileItems(fileId, filters),
+        {
+          maxRetries: 3,
+          delay: 1000,
+          onRetry: (attempt, maxRetries) => {
+            toast.loading(`Повторная попытка загрузки ${attempt}/${maxRetries}...`, {
+              id: 'load-items-retry'
+            });
+          }
+        }
+      );
+      
+      toast.dismiss('load-items-retry');
       setItems(data);
       if (onItemsUpdate) {
         onItemsUpdate(data);
       }
     } catch (err) {
-      setError(`Ошибка загрузки позиций: ${err.message}`);
+      toast.dismiss('load-items-retry');
+      handleApiError(err);
+      const errorMsg = `Ошибка загрузки позиций: ${err.message}`;
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fileId, activeFilters, selectedSheet, onItemsUpdate]);
 
-  const handleApplyFilters = () => {
+  const handleApplyFilters = useCallback(() => {
     setActiveFilters({ ...tempFilters });
-  };
+    toast.success('Фильтры применены');
+  }, [tempFilters]);
 
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     const clearedFilters = {
       brewery: '',
       beer_name: '',
@@ -87,7 +139,8 @@ function ParsedTable({
     };
     setTempFilters(clearedFilters);
     setActiveFilters(clearedFilters);
-  };
+    toast.success('Фильтры очищены');
+  }, []);
 
   const handleEdit = (item) => {
     setEditingId(item.id);
@@ -106,19 +159,29 @@ function ParsedTable({
     });
   };
 
-  const handleSave = async (itemId) => {
+  const handleSave = useCallback(async (itemId) => {
     try {
-      const updatedItem = await updateItem(itemId, editData);
-      setItems(items.map(item => item.id === itemId ? updatedItem : item));
+      const updatedItem = await retry(
+        () => updateItem(itemId, editData),
+        {
+          maxRetries: 2,
+          delay: 500,
+        }
+      );
+      const updatedItems = items.map(item => item.id === itemId ? updatedItem : item);
+      setItems(updatedItems);
       if (onItemsUpdate) {
-        onItemsUpdate(items.map(item => item.id === itemId ? updatedItem : item));
+        onItemsUpdate(updatedItems);
       }
       setEditingId(null);
       setEditData({});
+      toast.success('Позиция успешно сохранена');
     } catch (err) {
-      setError(`Ошибка сохранения: ${err.message}`);
+      handleApiError(err);
+      const errorMsg = `Ошибка сохранения: ${err.message}`;
+      setError(errorMsg);
     }
-  };
+  }, [items, editData, onItemsUpdate]);
 
   const handleCancel = () => {
     setEditingId(null);
@@ -150,7 +213,16 @@ function ParsedTable({
   };
 
   if (loading) {
-    return <div className="loading">Загрузка позиций...</div>;
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner">
+          <div className="spinner-ring"></div>
+          <div className="spinner-ring"></div>
+          <div className="spinner-ring"></div>
+        </div>
+        <p>Загрузка позиций...</p>
+      </div>
+    );
   }
 
   if (error) {
@@ -179,74 +251,107 @@ function ParsedTable({
 
         {selectedSheet && (
           <>
-            <div className="filters">
-              <input
-                type="text"
-                placeholder="Фильтр по пивоварне"
-                value={tempFilters.brewery}
-                onChange={(e) => setTempFilters({ ...tempFilters, brewery: e.target.value })}
-                className="input"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleApplyFilters();
-                  }
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Фильтр по названию"
-                value={tempFilters.beer_name}
-                onChange={(e) => setTempFilters({ ...tempFilters, beer_name: e.target.value })}
-                className="input"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleApplyFilters();
-                  }
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Фильтр по стилю"
-                value={tempFilters.style}
-                onChange={(e) => setTempFilters({ ...tempFilters, style: e.target.value })}
-                className="input"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleApplyFilters();
-                  }
-                }}
-              />
-              <button
-                className="button button-primary"
-                onClick={handleApplyFilters}
-                disabled={loading}
-              >
-                Применить фильтры
-              </button>
-              <button
-                className="button button-danger"
-                onClick={handleClearFilters}
-                disabled={loading}
-              >
-                Очистить
-              </button>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="filters"
+            >
+              <div className="search-section">
+                <SearchInput
+                  placeholder="Быстрый поиск по всем полям..."
+                  onSearch={(query) => {
+                    setSearchQuery(query);
+                    // Автоматически применяем поиск к фильтрам
+                    if (query) {
+                      setTempFilters({
+                        brewery: query,
+                        beer_name: query,
+                        style: query,
+                      });
+                    }
+                  }}
+                  suggestions={searchSuggestions}
+                />
+              </div>
+              
+              <div className="filter-inputs">
+                <input
+                  type="text"
+                  placeholder="Фильтр по пивоварне"
+                  value={tempFilters.brewery}
+                  onChange={(e) => setTempFilters({ ...tempFilters, brewery: e.target.value })}
+                  className="input"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleApplyFilters();
+                    }
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Фильтр по названию"
+                  value={tempFilters.beer_name}
+                  onChange={(e) => setTempFilters({ ...tempFilters, beer_name: e.target.value })}
+                  className="input"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleApplyFilters();
+                    }
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Фильтр по стилю"
+                  value={tempFilters.style}
+                  onChange={(e) => setTempFilters({ ...tempFilters, style: e.target.value })}
+                  className="input"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleApplyFilters();
+                    }
+                  }}
+                />
+                <button
+                  className="button button-primary"
+                  onClick={handleApplyFilters}
+                  disabled={loading}
+                >
+                  Применить фильтры
+                </button>
+                <button
+                  className="button button-danger"
+                  onClick={handleClearFilters}
+                  disabled={loading}
+                >
+                  Очистить
+                </button>
+              </div>
+            </motion.div>
 
             <div className="table-actions">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={items.length > 0 && items.every(item => selectedItems.includes(item.id))}
-                  onChange={handleSelectAllChange}
+              <div className="table-actions-left">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && items.every(item => selectedItems.includes(item.id))}
+                    onChange={handleSelectAllChange}
+                  />
+                  Выбрать все
+                </label>
+                <span className="selected-count">
+                  Выбрано в текущем листе: {items.filter(item => selectedItems.includes(item.id)).length} из {items.length}
+                </span>
+                <span className="selected-count-total">
+                  Всего выбрано: {selectedItems.length}
+                </span>
+              </div>
+              <div className="table-actions-right">
+                <ExportButton
+                  data={items}
+                  filename={`items_${selectedSheet || 'all'}_${new Date().toISOString().split('T')[0]}`}
+                  formats={['csv', 'json']}
                 />
-                Выбрать все
-              </label>
-              <span className="selected-count">
-                Выбрано в текущем листе: {items.filter(item => selectedItems.includes(item.id)).length} из {items.length}
-              </span>
-              <span className="selected-count-total">
-                Всего выбрано: {selectedItems.length}
-              </span>
+              </div>
             </div>
 
             <div className="table-container">
@@ -274,23 +379,31 @@ function ParsedTable({
                       <td colSpan="13" className="empty">Нет данных</td>
                     </tr>
                   ) : (
-                    items.map((item) => (
-                      <tr key={item.id}>
+                    items.map((item, index) => (
+                      <motion.tr
+                        key={item.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: index * 0.02 }}
+                        className={editingId === item.id ? 'editing' : selectedItems.includes(item.id) ? 'selected' : ''}
+                      >
                         <td>
                           <input
                             type="checkbox"
                             checked={selectedItems.includes(item.id)}
                             onChange={(e) => handleCheckboxChange(item.id, e.target.checked)}
+                            aria-label={`Выбрать позицию ${item.beer_name || item.id}`}
                           />
                         </td>
                         {editingId === item.id ? (
                           <>
-                            <td>
+                            <td className="editing-cell">
                               <input
                                 type="text"
                                 value={editData.brewery}
                                 onChange={(e) => setEditData({ ...editData, brewery: e.target.value })}
                                 className="input input-small"
+                                autoFocus
                               />
                             </td>
                             <td>
@@ -423,7 +536,7 @@ function ParsedTable({
                             </td>
                           </>
                         )}
-                      </tr>
+                      </motion.tr>
                     ))
                   )}
                 </tbody>
@@ -438,7 +551,7 @@ function ParsedTable({
       </div>
     </div>
   );
-}
+});
 
 export default ParsedTable;
 

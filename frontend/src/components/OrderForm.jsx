@@ -2,11 +2,14 @@
  * Компонент для формирования заказа.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { getFileItems, createOrder, downloadOrder } from '../api';
+import { quantitySchema } from '../utils/validation';
 import './OrderForm.css';
 
-function OrderForm({ fileId, selectedItems, items }) {
+const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
   const [orderItems, setOrderItems] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [loading, setLoading] = useState(false);
@@ -52,7 +55,9 @@ function OrderForm({ fileId, selectedItems, items }) {
           return newQuantities;
         });
       } catch (err) {
-        setError(`Ошибка загрузки позиций: ${err.message}`);
+        const errorMsg = `Ошибка загрузки позиций: ${err.message}`;
+        toast.error(errorMsg);
+        setError(errorMsg);
       } finally {
         setLoadingItems(false);
       }
@@ -61,12 +66,32 @@ function OrderForm({ fileId, selectedItems, items }) {
     loadSelectedItems();
   }, [selectedItems, fileId]);
 
-  const handleQuantityChange = (itemId, value) => {
+  const [quantityErrors, setQuantityErrors] = useState({});
+
+  const handleQuantityChange = useCallback((itemId, value) => {
     const numValue = parseInt(value) || 0;
-    if (numValue >= 0) {
-      setQuantities({ ...quantities, [itemId]: numValue });
+    
+    // Валидация
+    try {
+      quantitySchema.parse({ quantity: numValue });
+      setQuantityErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[itemId];
+        return newErrors;
+      });
+    } catch (error) {
+      if (error.errors && error.errors[0]) {
+        setQuantityErrors(prev => ({
+          ...prev,
+          [itemId]: error.errors[0].message,
+        }));
+      }
     }
-  };
+    
+    if (numValue >= 0) {
+      setQuantities(prev => ({ ...prev, [itemId]: numValue }));
+    }
+  }, []);
 
   const handleCreateOrder = async () => {
     try {
@@ -83,43 +108,65 @@ function OrderForm({ fileId, selectedItems, items }) {
         }));
 
       if (orderItemsList.length === 0) {
-        setError('Выберите хотя бы одну позицию с количеством больше 0');
+        const errorMsg = 'Выберите хотя бы одну позицию с количеством больше 0';
+        toast.error(errorMsg);
+        setError(errorMsg);
+        return;
+      }
+
+      // Проверяем наличие ошибок валидации
+      const hasErrors = Object.keys(quantityErrors).length > 0;
+      if (hasErrors) {
+        const errorMsg = 'Исправьте ошибки в количестве товаров';
+        toast.error(errorMsg);
+        setError(errorMsg);
         return;
       }
 
       // Создаем заказ
       const order = await createOrder(orderItemsList, exportFormat);
       setCreatedOrder(order);
-      setSuccess(`Заказ #${order.id} успешно создан`);
+      const successMsg = `Заказ #${order.id} успешно создан`;
+      toast.success(successMsg);
+      setSuccess(successMsg);
 
       // Автоматически экспортируем заказ
       setTimeout(() => {
         handleExport(order.id);
       }, 1000);
     } catch (err) {
-      setError(`Ошибка создания заказа: ${err.message}`);
+      const errorMsg = `Ошибка создания заказа: ${err.message}`;
+      toast.error(errorMsg);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExport = async (orderId) => {
+  const handleExport = useCallback(async (orderId) => {
     try {
       await downloadOrder(orderId);
+      toast.success('Заказ успешно скачан');
     } catch (err) {
-      setError(`Ошибка экспорта заказа: ${err.message}`);
+      const errorMsg = `Ошибка экспорта заказа: ${err.message}`;
+      toast.error(errorMsg);
+      setError(errorMsg);
     }
-  };
+  }, []);
 
-  const totalItems = orderItems.reduce((sum, item) => {
-    return sum + (quantities[item.id] || 0);
-  }, 0);
+  const totalItems = useMemo(() => {
+    return orderItems.reduce((sum, item) => {
+      return sum + (quantities[item.id] || 0);
+    }, 0);
+  }, [orderItems, quantities]);
 
-  const totalPrice = orderItems.reduce((sum, item) => {
-    const qty = quantities[item.id] || 0;
-    const price = parseFloat(item.price) || 0;
-    return sum + (qty * price);
-  }, 0);
+  const totalPrice = useMemo(() => {
+    return orderItems.reduce((sum, item) => {
+      const qty = quantities[item.id] || 0;
+      const price = parseFloat(item.price) || 0;
+      return sum + (qty * price);
+    }, 0);
+  }, [orderItems, quantities]);
 
   return (
     <div className="OrderForm">
@@ -161,13 +208,24 @@ function OrderForm({ fileId, selectedItems, items }) {
         {success && <div className="success">{success}</div>}
 
         {loadingItems ? (
-          <div className="loading">Загрузка выбранных позиций...</div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="loading"
+          >
+            Загрузка выбранных позиций...
+          </motion.div>
         ) : orderItems.length === 0 ? (
-          <div className="empty-message">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="empty-message"
+          >
             <p>Выберите позиции для заказа на вкладке "Позиции"</p>
-          </div>
+          </motion.div>
         ) : (
-          <>
+          <AnimatePresence>
+            <>
             <div className="table-container">
               <table className="table">
                 <thead>
@@ -184,13 +242,18 @@ function OrderForm({ fileId, selectedItems, items }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {orderItems.map((item) => {
+                  {orderItems.map((item, index) => {
                     const qty = quantities[item.id] || 0;
                     const price = parseFloat(item.price) || 0;
                     const sum = qty * price;
 
                     return (
-                      <tr key={item.id}>
+                      <motion.tr
+                        key={item.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                      >
                         <td>{item.brewery || '-'}</td>
                         <td>{item.beer_name || '-'}</td>
                         <td>{item.style || '-'}</td>
@@ -199,16 +262,29 @@ function OrderForm({ fileId, selectedItems, items }) {
                         <td>{item.volume || '-'}</td>
                         <td>{item.format_type || '-'}</td>
                         <td>
-                          <input
-                            type="number"
-                            min="0"
-                            value={qty}
-                            onChange={(e) => handleQuantityChange(item.id, e.target.value)}
-                            className="input input-small"
-                          />
+                          <div className="quantity-input-wrapper">
+                            <input
+                              type="number"
+                              min="0"
+                              max="10000"
+                              value={qty}
+                              onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                              className={`input input-small ${quantityErrors[item.id] ? 'input-error' : ''}`}
+                              aria-label={`Количество для ${item.beer_name || item.id}`}
+                            />
+                            {quantityErrors[item.id] && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="input-error-message"
+                              >
+                                {quantityErrors[item.id]}
+                              </motion.div>
+                            )}
+                          </div>
                         </td>
                         <td className="sum">{sum.toFixed(2)}</td>
-                      </tr>
+                      </motion.tr>
                     );
                   })}
                 </tbody>
@@ -240,12 +316,13 @@ function OrderForm({ fileId, selectedItems, items }) {
                 </button>
               )}
             </div>
-          </>
+            </>
+          </AnimatePresence>
         )}
       </div>
     </div>
   );
-}
+});
 
 export default OrderForm;
 

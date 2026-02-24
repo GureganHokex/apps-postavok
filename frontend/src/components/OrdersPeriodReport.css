@@ -1,0 +1,252 @@
+/**
+ * Стили отчёта по заказам за период (вкладка Статистика)
+ */
+
+.OrdersPeriodReport {
+  padding: var(--spacing-md, 1rem) 0;
+}
+
+.OrdersPeriodReport h3 {
+  margin: 0 0 var(--spacing-lg, 1.25rem) 0;
+  font-size: var(--font-lg, 1.125rem);
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 1rem);
+  margin-bottom: var(--spacing-lg, 1.25rem);
+}
+
+.OrdersPeriodReport-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.OrdersPeriodReport-preset {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.OrdersPeriodReport-preset:hover {
+  background: var(--bg-secondary);
+  border-color: var(--primary-color);
+}
+
+.OrdersPeriodReport-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.OrdersPeriodReport-date-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-date-label span {
+  min-width: 1.8rem;
+}
+
+.OrdersPeriodReport-date-label .input {
+  min-width: 150px;
+}
+
+.OrdersPeriodReport-period-hint {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-loading,
+.OrdersPeriodReport-error {
+  padding: var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-error {
+  color: var(--danger-color, #e74c3c);
+  padding: var(--spacing-lg);
+}
+
+.OrdersPeriodReport-error p {
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.OrdersPeriodReport-error-hint {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md) !important;
+}
+
+.OrdersPeriodReport-error .button {
+  margin-top: var(--spacing-xs);
+}
+
+.OrdersPeriodReport-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.OrdersPeriodReport-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.OrdersPeriodReport-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-summary-item strong {
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-total {
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-base);
+}
+
+.OrdersPeriodReport-price-increase {
+  color: var(--danger-color, #e74c3c);
+  font-weight: 600;
+}
+
+.OrdersPeriodReport-price-decrease {
+  color: var(--success-color, #27ae60);
+  font-weight: 600;
+}
+
+.OrdersPeriodReport-hint {
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.OrdersPeriodReport-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-format-hint {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersPeriodReport-format-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.OrdersPeriodReport-format-link:hover {
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-detail {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.OrdersPeriodReport-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.OrdersPeriodReport-detail-header h4 {
+  margin: 0;
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-detail-close {
+  background: none;
+  border: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-lg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.OrdersPeriodReport-detail-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.OrdersPeriodReport-detail-table {
+  font-size: var(--font-sm);
+}
+
+.OrdersPeriodReport-price-up {
+  color: var(--danger-color, #e74c3c);
+  font-weight: 600;
+}
+
+.OrdersPeriodReport-price-down {
+  color: var(--success-color, #27ae60);
+  font-weight: 600;
+}
+
+.OrdersPeriodReport-table-wrap {
+  overflow-x: auto;
+}
+
+.OrdersPeriodReport-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.OrdersPeriodReport-table th,
+.OrdersPeriodReport-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.OrdersPeriodReport-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.OrdersPeriodReport-table td {
+  color: var(--text-primary);
+}

@@ -145,7 +145,11 @@ class ItemProcessingService:
         
         # Добавляем файл
         normalized_item['file'] = file_obj
-        
+
+        # Поставщик: из прайса или имя файла как подстановка
+        if not normalized_item.get('supplier_name') or not str(normalized_item.get('supplier_name', '')).strip():
+            normalized_item['supplier_name'] = getattr(file_obj, 'original_filename', None) or ''
+
         # Удаляем служебные поля
         item_for_save = {
             k: v for k, v in normalized_item.items()

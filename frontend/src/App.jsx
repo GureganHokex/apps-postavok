@@ -13,6 +13,7 @@ import OrderForm from './components/OrderForm';
 import OrdersHistory from './components/OrdersHistory';
 import ThemeToggle from './components/ThemeToggle';
 import StatisticsDashboard from './components/StatisticsDashboard';
+import OrdersPeriodReport from './components/OrdersPeriodReport';
 import TapsPage from './components/TapsPage';
 import SupplierSettings from './components/SupplierSettings';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -180,15 +181,15 @@ function App() {
             >
               🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
             </button>
-            <button
-              className={activeTab === 'statistics' ? 'active' : ''}
-              onClick={() => setActiveTab('statistics')}
-              aria-label="Статистика"
-            >
-              📊 Статистика
-            </button>
           </>
         )}
+        <button
+          className={activeTab === 'statistics' ? 'active' : ''}
+          onClick={() => setActiveTab('statistics')}
+          aria-label="Статистика"
+        >
+          📊 Статистика
+        </button>
         <button
           className={activeTab === 'orders-history' ? 'active' : ''}
           onClick={() => setActiveTab('orders-history')}
@@ -290,15 +291,24 @@ function App() {
             </motion.div>
           )}
 
-          {activeTab === 'statistics' && currentFile && items.length > 0 && (
+          {activeTab === 'statistics' && (
             <motion.div
               key="statistics"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
+              className="Statistics-page"
             >
-              <StatisticsDashboard items={items} />
+              <section className="Statistics-sheet Statistics-sheet-orders">
+                <OrdersPeriodReport />
+              </section>
+              {currentFile && items.length > 0 && (
+                <section className="Statistics-sheet Statistics-sheet-file">
+                  <h2 className="Statistics-sheet-title">По текущему прайсу</h2>
+                  <StatisticsDashboard items={items} />
+                </section>
+              )}
             </motion.div>
           )}
 

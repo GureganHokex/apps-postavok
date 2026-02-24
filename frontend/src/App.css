@@ -280,3 +280,23 @@
   }
 }
 
+/* Страница Статистика: два листа — по заказам и по прайсу */
+.Statistics-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+.Statistics-sheet {
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--border-color);
+}
+
+.Statistics-sheet-title {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+

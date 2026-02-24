@@ -206,10 +206,6 @@ function OrdersHistory() {
                 <strong>{stats.total_orders}</strong>
               </div>
               <div className="stats-summary-row">
-                <span>Сумма (руб)</span>
-                <strong>{Number(stats.total_sum).toLocaleString('ru-RU')}</strong>
-              </div>
-              <div className="stats-summary-row">
                 <span>Позиций (шт)</span>
                 <strong>{stats.total_positions}</strong>
               </div>
@@ -218,6 +214,49 @@ function OrdersHistory() {
                 <strong>{Number(stats.average_order_sum || 0).toLocaleString('ru-RU')}</strong>
               </div>
             </div>
+
+            <div className="stats-period-sum">
+              <strong>Сумма за период:</strong>{' '}
+              {Number(stats.total_sum).toLocaleString('ru-RU')} ₽
+              {stats.price_increase_sum != null && stats.price_increase_sum !== 0 && (
+                <span className={stats.price_increase_sum > 0 ? 'price-increase' : 'price-decrease'}>
+                  {' '}({stats.price_increase_sum > 0 ? '+' : ''}{Number(stats.price_increase_sum).toLocaleString('ru-RU')} ₽ за счёт изменения цен за период)
+                </span>
+              )}
+              {stats.sum_at_period_start != null && stats.sum_at_period_start > 0 && (
+                <div className="stats-period-hint">
+                  В ценах на начало периода: {Number(stats.sum_at_period_start).toLocaleString('ru-RU')} ₽
+                </div>
+              )}
+            </div>
+
+            {(stats.by_format && stats.by_format.length > 0) && (
+              <section className="stats-section">
+                <h4>По форматам (банки, кеги)</h4>
+                <div className="stats-table-wrap">
+                  <table className="stats-table">
+                    <thead>
+                      <tr>
+                        <th>Формат</th>
+                        <th>Кол-во, шт</th>
+                        <th>Позиций</th>
+                        <th>Сумма, руб</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.by_format.map((row, idx) => (
+                        <tr key={row.format || idx}>
+                          <td>{row.format}</td>
+                          <td>{row.quantity}</td>
+                          <td>{row.count}</td>
+                          <td>{Number(row.sum || 0).toLocaleString('ru-RU')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <section className="stats-section">
               <h4>Сводка по позициям (одинаковые позиции в сумме)</h4>

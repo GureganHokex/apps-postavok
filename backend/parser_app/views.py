@@ -6,6 +6,7 @@ import os
 import zipfile
 import logging
 import traceback
+from collections import defaultdict
 from pathlib import Path
 from django.conf import settings
 from django.db import models
@@ -720,6 +721,252 @@ class OrderViewSet(viewsets.ModelViewSet):
             as_attachment=True,
             filename=file_path.name
         )
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Агрегированная статистика по заказам за период.
+        GET /api/orders/statistics/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+        """
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        qs = Order.objects.all().order_by('created_at')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        orders = list(qs)
+        total_orders = len(orders)
+        total_sum = 0
+        total_positions = 0
+        brewery_sum = defaultdict(lambda: {'count': 0, 'sum': 0})
+        item_sum = defaultdict(lambda: {'name': '', 'quantity': 0, 'sum': 0})
+        by_sheet = defaultdict(lambda: {'count': 0, 'sum': 0, 'quantity': 0})
+        by_format = defaultdict(lambda: {'count': 0, 'sum': 0, 'quantity': 0})
+        item_order_dates = defaultdict(list)
+        item_prices_by_date = defaultdict(list)
+        item_supplier = {}
+        item_format = {}
+
+        for order in orders:
+            order_date = order.created_at.date().isoformat()
+            for row in order.items or []:
+                item_id = row.get('item_id') or row.get('id')
+                qty = int(row.get('quantity') or 1)
+                if not item_id:
+                    continue
+                price_val = None
+                if row.get('price') is not None:
+                    try:
+                        price_val = float(row['price'])
+                    except (TypeError, ValueError):
+                        pass
+                sheet_name = (row.get('sheet') or '').strip() or 'Без листа'
+                format_name = (row.get('format_type') or '').strip() or 'Не указано'
+                name = (row.get('beer_name') or '').strip()
+                brewery = (row.get('brewery') or '').strip()
+
+                try:
+                    item = ParsedItem.objects.get(pk=item_id)
+                except ParsedItem.DoesNotExist:
+                    item = None
+                if price_val is None and item and item.price is not None:
+                    try:
+                        price_val = float(item.price)
+                    except (TypeError, ValueError):
+                        pass
+                if not name and item:
+                    name = (item.beer_name or '').strip() or f'ID {item.id}'
+                if not brewery and item:
+                    brewery = (item.brewery or '').strip() or 'Не указано'
+                if not sheet_name or sheet_name == 'Без листа':
+                    if item and isinstance(item.raw_source_location, dict) and item.raw_source_location.get('sheet'):
+                        sheet_name = item.raw_source_location['sheet']
+                if not format_name or format_name == 'Не указано':
+                    if item and item.format_type:
+                        format_name = item.format_type
+
+                supplier_name = 'Не указано'
+                if item and getattr(item, 'supplier_name', None) and (item.supplier_name or '').strip():
+                    supplier_name = (item.supplier_name or '').strip()
+                elif row.get('supplier_name') and str(row.get('supplier_name')).strip():
+                    supplier_name = (str(row.get('supplier_name') or '').strip())
+                elif item and getattr(item, 'file', None) and item.file:
+                    supplier_name = (getattr(item.file, 'original_filename', None) or '').strip() or 'Файл без имени'
+                item_supplier[item_id] = supplier_name
+                item_format[item_id] = format_name
+
+                total_positions += qty
+                line_sum = (price_val * qty) if (price_val is not None and price_val > 0) else 0
+                if price_val is not None and price_val > 0:
+                    total_sum += line_sum
+                    brewery_sum[brewery]['count'] += qty
+                    brewery_sum[brewery]['sum'] += line_sum
+                by_sheet[sheet_name]['quantity'] += qty
+                by_sheet[sheet_name]['sum'] += line_sum
+                by_sheet[sheet_name]['count'] += 1
+                by_format[format_name]['quantity'] += qty
+                by_format[format_name]['sum'] += line_sum
+                by_format[format_name]['count'] += 1
+                item_sum[item_id]['name'] = name or f'ID {item_id}'
+                item_sum[item_id]['quantity'] = item_sum[item_id]['quantity'] + qty
+                item_sum[item_id]['sum'] = item_sum[item_id]['sum'] + line_sum
+                item_order_dates[item_id].append({'date': order_date, 'quantity': qty, 'order_id': order.id})
+                if price_val is not None:
+                    item_prices_by_date[item_id].append({'date': order_date, 'price': price_val})
+
+        top_breweries = sorted(
+            [{'name': k, 'count': v['count'], 'sum': round(v['sum'], 2)} for k, v in brewery_sum.items()],
+            key=lambda x: -x['sum']
+        )[:10]
+        top_items = sorted(
+            [{'item_id': k, 'name': v['name'], 'quantity': v['quantity'], 'sum': round(v['sum'], 2)} for k, v in item_sum.items()],
+            key=lambda x: -x['sum']
+        )[:15]
+
+        by_sheet_list = sorted(
+            [{'sheet': k, 'quantity': v['quantity'], 'count': v['count'], 'sum': round(v['sum'], 2)} for k, v in by_sheet.items()],
+            key=lambda x: -x['sum']
+        )
+        by_format_list = sorted(
+            [{'format': k, 'quantity': v['quantity'], 'count': v['count'], 'sum': round(v['sum'], 2)} for k, v in by_format.items()],
+            key=lambda x: -x['sum']
+        )
+
+        ranking_with_dates = []
+        for item_id, v in item_sum.items():
+            dates = item_order_dates.get(item_id, [])
+            ranking_with_dates.append({
+                'item_id': item_id,
+                'name': v['name'],
+                'total_quantity': v['quantity'],
+                'total_sum': round(v['sum'], 2),
+                'by_date': sorted(dates, key=lambda x: x['date']),
+            })
+        ranking_with_dates.sort(key=lambda x: -x['total_quantity'])
+
+        price_trend = []
+        for item_id, prices_list in item_prices_by_date.items():
+            if len(prices_list) < 2:
+                continue
+            prices_list.sort(key=lambda x: x['date'])
+            first_p = prices_list[0]['price']
+            last_p = prices_list[-1]['price']
+            if first_p <= 0:
+                continue
+            change_pct = round((last_p - first_p) / first_p * 100, 1)
+            price_trend.append({
+                'item_id': item_id,
+                'name': item_sum.get(item_id, {}).get('name') or f'ID {item_id}',
+                'first_date': prices_list[0]['date'],
+                'first_price': round(first_p, 2),
+                'last_date': prices_list[-1]['date'],
+                'last_price': round(last_p, 2),
+                'change_percent': change_pct,
+            })
+        price_trend.sort(key=lambda x: -abs(x['change_percent']))
+
+        format_detail = defaultdict(list)
+        for item_id, v in item_sum.items():
+            fmt = item_format.get(item_id)
+            if not fmt:
+                continue
+            prices_list = item_prices_by_date.get(item_id, [])
+            first_price = None
+            last_price = None
+            change_percent = None
+            if len(prices_list) >= 1:
+                prices_list.sort(key=lambda x: x['date'])
+                first_price = round(prices_list[0]['price'], 2)
+                last_price = round(prices_list[-1]['price'], 2)
+                if len(prices_list) >= 2 and prices_list[0]['price'] and prices_list[0]['price'] > 0:
+                    change_percent = round(
+                        (prices_list[-1]['price'] - prices_list[0]['price']) / prices_list[0]['price'] * 100, 1
+                    )
+            format_detail[fmt].append({
+                'item_id': item_id,
+                'name': v['name'],
+                'supplier_name': item_supplier.get(item_id, 'Не указано'),
+                'quantity': v['quantity'],
+                'total_sum': round(v['sum'], 2),
+                'first_price': first_price,
+                'last_price': last_price,
+                'change_percent': change_percent,
+            })
+        for fmt in format_detail:
+            format_detail[fmt].sort(key=lambda x: -x['total_sum'])
+        format_detail = dict(format_detail)
+
+        first_price_in_period = {}
+        for item_id, prices_list in item_prices_by_date.items():
+            in_period = prices_list
+            if date_from or date_to:
+                in_period = [
+                    p for p in prices_list
+                    if (not date_from or p['date'] >= date_from) and (not date_to or p['date'] <= date_to)
+                ]
+            if not in_period:
+                in_period = prices_list
+            in_period.sort(key=lambda x: x['date'])
+            if in_period and in_period[0].get('price') and in_period[0]['price'] > 0:
+                first_price_in_period[item_id] = in_period[0]['price']
+
+        sum_at_period_start = 0
+        for order in orders:
+            order_date = order.created_at.date().isoformat()
+            if date_from and order_date < date_from:
+                continue
+            if date_to and order_date > date_to:
+                continue
+            for row in order.items or []:
+                item_id = row.get('item_id') or row.get('id')
+                qty = int(row.get('quantity') or 1)
+                if not item_id:
+                    continue
+                first_p = first_price_in_period.get(item_id)
+                if first_p is not None and first_p > 0:
+                    sum_at_period_start += first_p * qty
+
+        price_increase_sum = round(total_sum - sum_at_period_start, 2)
+
+        orders_by_day = defaultdict(lambda: {'count': 0, 'sum': 0})
+        for order in orders:
+            day = order.created_at.date().isoformat()
+            orders_by_day[day]['count'] += 1
+            day_sum = 0
+            for row in order.items or []:
+                item_id = row.get('item_id') or row.get('id')
+                qty = int(row.get('quantity') or 1)
+                price_val = row.get('price')
+                if price_val is None and item_id:
+                    try:
+                        item = ParsedItem.objects.get(pk=item_id)
+                        price_val = float(item.price) if item.price is not None else None
+                    except ParsedItem.DoesNotExist:
+                        pass
+                if price_val is not None and qty:
+                    day_sum += float(price_val) * qty
+            orders_by_day[day]['sum'] += day_sum
+        by_day = [{'date': k, 'orders_count': v['count'], 'sum': round(v['sum'], 2)} for k, v in sorted(orders_by_day.items())]
+
+        return Response({
+            'total_orders': total_orders,
+            'total_sum': round(total_sum, 2),
+            'total_positions': total_positions,
+            'average_order_sum': round(total_sum / total_orders, 2) if total_orders else 0,
+            'sum_at_period_start': round(sum_at_period_start, 2),
+            'price_increase_sum': price_increase_sum,
+            'top_breweries': top_breweries,
+            'top_items': top_items,
+            'by_day': by_day,
+            'by_sheet': by_sheet_list,
+            'by_format': by_format_list,
+            'format_detail': format_detail,
+            'ranking_with_dates': ranking_with_dates[:50],
+            'price_trend': price_trend[:30],
+        })
 
 
 @api_view(['POST'])

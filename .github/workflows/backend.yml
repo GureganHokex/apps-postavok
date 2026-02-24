@@ -9,15 +9,15 @@ permissions:
   contents: read
   packages: write
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/apps-postavok-backend
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set image name (lowercase for GHCR)
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/apps-postavok-backend" >> $GITHUB_ENV
 
       - name: Log in to GHCR
         uses: docker/login-action@v3

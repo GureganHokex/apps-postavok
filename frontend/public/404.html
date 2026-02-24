@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>Redirecting…</title>
+    <!--
+      Простой SPA-фолбэк для GitHub Pages: перенаправляем на корень сайта,
+      чтобы React-приложение загрузилось вместо стандартной 404.
+      Если нужен возврат на конкретный маршрут после обновления страницы,
+      потребуется доработка клиента для восстановления маршрута.
+    -->
+    <script>
+      (function redirectToRoot() {
+        var pathParts = window.location.pathname.split("/").slice(0, -1);
+        var basePath = pathParts.join("/") || "/";
+        if (!basePath.endsWith("/")) {
+          basePath += "/";
+        }
+        window.location.replace(basePath);
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>
+      Похоже, запрошенная страница не найдена. Перейдите на главную.
+    </noscript>
+  </body>
+</html>

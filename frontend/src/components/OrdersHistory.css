@@ -1,0 +1,337 @@
+/**
+ * Стили для компонента истории заказов
+ */
+
+.OrdersHistory .orders-filters {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.OrdersHistory .orders-filters input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.OrdersHistory .orders-stats {
+  display: flex;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.OrdersHistory .stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.OrdersHistory .stat-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.OrdersHistory .stat-value {
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.OrdersHistory .orders-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.OrdersHistory .order-card {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  transition: var(--transition-base);
+  box-shadow: var(--shadow-sm);
+}
+
+.OrdersHistory .order-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.OrdersHistory .order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.OrdersHistory .order-info h3 {
+  margin: 0 0 var(--spacing-xs) 0;
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+}
+
+.OrdersHistory .order-filename {
+  font-size: var(--font-sm);
+  color: var(--primary-color);
+  word-break: break-all;
+}
+
+.OrdersHistory .order-date {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersHistory .format-badge {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.OrdersHistory .format-badge.excel {
+  background-color: rgba(39, 174, 96, 0.1);
+  color: var(--success-color);
+}
+
+.OrdersHistory .format-badge.pdf {
+  background-color: rgba(231, 76, 60, 0.1);
+  color: var(--danger-color);
+}
+
+.OrdersHistory .order-details {
+  display: flex;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.OrdersHistory .detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.OrdersHistory .detail-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersHistory .detail-value {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.OrdersHistory .order-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.OrdersHistory .order-actions button {
+  flex: 1 1 auto;
+  min-width: 80px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.OrdersHistory .order-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-md);
+}
+
+.OrdersHistory .order-modal-content {
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.OrdersHistory .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-lg);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.OrdersHistory .modal-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.OrdersHistory .modal-close {
+  background: none;
+  border: none;
+  font-size: var(--font-xl);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.OrdersHistory .modal-close:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .modal-body {
+  padding: var(--spacing-lg);
+}
+
+.OrdersHistory .modal-body p {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .order-items-list {
+  margin-top: var(--spacing-lg);
+}
+
+.OrdersHistory .order-items-list h3 {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .order-items-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.OrdersHistory .order-items-list li {
+  padding: var(--spacing-sm);
+  background-color: var(--bg-tertiary);
+  margin-bottom: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+}
+
+/* Расширенная статистика заказов */
+.OrdersHistory .stats-loading {
+  padding: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.OrdersHistory .orders-extended-stats {
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.OrdersHistory .orders-extended-stats h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .stats-period {
+  margin: 0 0 var(--spacing-lg) 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersHistory .stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.OrdersHistory .stats-summary-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-sm);
+}
+
+.OrdersHistory .stats-summary-row span {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.OrdersHistory .stats-summary-row strong {
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .stats-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.OrdersHistory .stats-section:last-child {
+  margin-bottom: 0;
+}
+
+.OrdersHistory .stats-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+}
+
+.OrdersHistory .stats-table-wrap {
+  overflow-x: auto;
+}
+
+.OrdersHistory .stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.OrdersHistory .stats-table th,
+.OrdersHistory .stats-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.OrdersHistory .stats-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.OrdersHistory .stats-table td {
+  color: var(--text-primary);
+}
+
+.OrdersHistory .stats-table td.price-up {
+  color: var(--danger-color);
+}
+
+.OrdersHistory .stats-table td.price-down {
+  color: var(--success-color);
+}
+
+.OrdersHistory .stats-empty {
+  margin: 0;
+  padding: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+

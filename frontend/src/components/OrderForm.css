@@ -1,0 +1,276 @@
+/**
+ * Стили для компонента OrderForm.
+ */
+
+.OrderForm .order-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.OrderForm .format-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.OrderForm .format-selector label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.OrderForm .format-selector select {
+  width: auto;
+  padding: var(--spacing-sm) var(--spacing-md);
+  min-width: 120px;
+}
+
+.OrderForm .order-summary {
+  display: flex;
+  gap: var(--spacing-xl);
+  flex-wrap: wrap;
+}
+
+.OrderForm .summary-item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-md);
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  min-width: 150px;
+}
+
+.OrderForm .summary-item .label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.OrderForm .summary-item .value {
+  font-size: var(--font-xl);
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.OrderForm .table-container {
+  overflow-x: auto;
+  margin-bottom: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.OrderForm .input-small {
+  width: 100px;
+  padding: var(--spacing-sm);
+  text-align: center;
+  font-weight: 500;
+}
+
+.OrderForm .quantity-input-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.OrderForm .input-error {
+  border-color: var(--danger-color);
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+.OrderForm .input-error-message {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--danger-color);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: var(--shadow-md);
+}
+
+.OrderForm .input-error-message::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-bottom-color: var(--danger-color);
+}
+
+.OrderForm .sum {
+  font-weight: 600;
+  color: var(--success-color);
+  font-size: var(--font-lg);
+}
+
+.OrderForm .total-label {
+  font-weight: 700;
+  text-align: right;
+  padding-right: var(--spacing-md);
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrderForm .total-value {
+  font-weight: 700;
+  font-size: var(--font-xl);
+  color: var(--primary-color);
+}
+
+.OrderForm .order-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: var(--spacing-lg);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.OrderForm .empty-message {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin: var(--spacing-lg) 0;
+}
+
+.OrderForm .empty-message p {
+  font-size: var(--font-lg);
+  margin: 0;
+}
+
+.OrderForm .table tfoot {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.OrderForm .table tfoot tr {
+  border-top: 2px solid var(--border-color);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .OrderForm .order-controls {
+    flex-direction: column;
+  }
+  
+  .OrderForm .order-summary {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .OrderForm .summary-item {
+    flex: 1;
+    min-width: auto;
+  }
+  
+  .OrderForm .order-actions {
+    flex-direction: column;
+  }
+  
+  .OrderForm .order-actions button {
+    width: 100%;
+  }
+}
+
+/* Модальное окно */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-content h3 {
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.modal-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 20px 0;
+}
+
+.modal-field {
+  margin-bottom: 16px;
+}
+
+.modal-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modal-field select {
+  width: 100%;
+}
+
+.modal-preview {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+}
+
+.modal-preview strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.modal-preview ul {
+  margin: 0;
+  padding-left: 20px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.modal-preview li {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+

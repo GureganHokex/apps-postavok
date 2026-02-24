@@ -1,0 +1,57 @@
+.bulk-actions {
+  background: var(--color-bg-secondary, #f8f9fa);
+  border: 1px solid var(--color-border, #dee2e6);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.bulk-actions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.bulk-actions-count {
+  font-weight: 600;
+  color: var(--color-primary, #007bff);
+}
+
+.bulk-actions-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bulk-edit-form {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border, #dee2e6);
+}
+
+.bulk-edit-form h4 {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.bulk-edit-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.bulk-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.price-change-buttons {
+  display: flex;
+  gap: 0.5rem;
+}

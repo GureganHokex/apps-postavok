@@ -1,0 +1,707 @@
+/* Страница управления кранами - стиль Google Sheets */
+
+.TapsPage {
+  padding: 20px;
+}
+
+.taps-layout {
+  display: flex;
+  gap: 20px;
+}
+
+.taps-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.taps-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.TapsPage .card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.taps-header {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.taps-header h2 {
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Поиск по кранам */
+.taps-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.taps-search .search-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: var(--transition-base);
+}
+
+.taps-search .search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.taps-search .clear-search-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: var(--transition-base);
+}
+
+.taps-search .clear-search-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Табы локаций */
+.locations-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.location-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.location-tab:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.location-tab.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.location-tab.active .location-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.location-name {
+  font-weight: 500;
+}
+
+.location-count {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.delete-location-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.4;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: opacity 0.2s;
+}
+
+.delete-location-btn:hover {
+  opacity: 1;
+  color: var(--error-color);
+}
+
+.add-location-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 2px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.add-location-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.add-location-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-location-form input {
+  padding: 6px 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  width: 160px;
+}
+
+.add-location-form .btn-confirm,
+.add-location-form .btn-cancel {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-location-form .btn-confirm {
+  background: var(--success-color);
+  color: white;
+}
+
+.add-location-form .btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* Легенда цветов */
+.color-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.legend-title {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-bar {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.legend-bar.blue {
+  background: #29b6f6;
+}
+
+.legend-bar.green {
+  background: #66bb6a;
+}
+
+.legend-hint {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+/* Таблица кранов - стиль Google Sheets */
+.taps-table-container {
+  overflow-x: auto;
+}
+
+.taps-table.sheets-style {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.taps-table.sheets-style th,
+.taps-table.sheets-style td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.taps-table.sheets-style th {
+  background: #f3f3f3;
+  color: #333;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+[data-theme="dark"] .taps-table.sheets-style th {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.col-num {
+  width: 50px;
+  text-align: center !important;
+  font-weight: 600;
+  background: #f8f8f8;
+}
+
+[data-theme="dark"] .col-num {
+  background: var(--bg-tertiary);
+}
+
+
+.col-current {
+  min-width: 250px;
+  background: #fff9e6;
+}
+
+[data-theme="dark"] .col-current {
+  background: rgba(255, 200, 0, 0.1);
+}
+
+.col-current.free {
+  background: #e8f5e9;
+}
+
+[data-theme="dark"] .col-current.free {
+  background: rgba(76, 175, 80, 0.15);
+}
+
+.col-next {
+  min-width: 200px;
+  background: #e3f2fd;
+}
+
+[data-theme="dark"] .col-next {
+  background: rgba(33, 150, 243, 0.1);
+}
+
+.col-actions {
+  width: 80px;
+  text-align: center !important;
+}
+
+
+/* Ячейка с цветовой полоской */
+.cell-with-color {
+  display: flex;
+  align-items: stretch;
+  min-height: 40px;
+  margin: -8px -12px;
+  position: relative;
+}
+
+.color-bar {
+  width: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.color-bar:hover {
+  width: 8px;
+}
+
+/* Цвета полосок */
+.cell-with-color.color-none .color-bar {
+  background: transparent;
+  border-right: 1px dashed rgba(128, 128, 128, 0.3);
+}
+
+.cell-with-color.color-blue .color-bar {
+  background: #29b6f6;
+}
+
+.cell-with-color.color-green .color-bar {
+  background: #66bb6a;
+}
+
+/* Фон ячейки по цвету */
+.cell-with-color.color-blue {
+  background: rgba(41, 182, 246, 0.1);
+}
+
+.cell-with-color.color-green {
+  background: rgba(102, 187, 106, 0.1);
+}
+
+[data-theme="dark"] .cell-with-color.color-blue {
+  background: rgba(41, 182, 246, 0.15);
+}
+
+[data-theme="dark"] .cell-with-color.color-green {
+  background: rgba(102, 187, 106, 0.15);
+}
+
+/* Контент ячейки */
+.cell-content {
+  flex: 1;
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.cell-content:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] .cell-content:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Ячейка с пивом */
+.beer-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.beer-name {
+  flex: 1;
+  word-break: break-word;
+}
+
+.free-label {
+  color: #4caf50;
+  font-weight: 500;
+}
+
+.clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 1rem;
+  padding: 2px 4px;
+}
+
+td:hover .clear-btn {
+  opacity: 0.5;
+}
+
+.clear-btn:hover {
+  opacity: 1 !important;
+  color: var(--error-color);
+}
+
+/* Редактирование ячейки */
+.taps-table td input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 2px solid var(--accent-color);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: inherit;
+  font-family: inherit;
+}
+
+/* Кнопки действий */
+.btn-shift {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  opacity: 0.6;
+  transition: all 0.2s;
+  padding: 4px;
+}
+
+.btn-shift:hover:not(:disabled) {
+  opacity: 1;
+  transform: rotate(90deg);
+}
+
+.btn-shift:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.btn-delete-tap {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0.4;
+  transition: all 0.2s;
+  padding: 4px;
+}
+
+.btn-delete-tap:hover {
+  opacity: 1;
+}
+
+.add-tap-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-tap-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+/* Боковая панель */
+.taps-sidebar .card {
+  position: sticky;
+  top: 20px;
+}
+
+.taps-sidebar h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.sidebar-hint {
+  margin: 0 0 16px 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.add-beer-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-beer-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.add-beer-form input::placeholder {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.add-beer-form button {
+  padding: 8px 14px;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-beer-form button:hover {
+  background: var(--accent-hover);
+}
+
+/* Список доступного пива */
+.available-beers-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.available-beer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: grab;
+  transition: all 0.2s;
+}
+
+.available-beer-item:hover {
+  border-color: var(--accent-color);
+  transform: translateX(2px);
+}
+
+.available-beer-item:active {
+  cursor: grabbing;
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+.beer-display {
+  flex: 1;
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+
+.delete-beer-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 1rem;
+  padding: 2px;
+}
+
+.available-beer-item:hover .delete-beer-btn {
+  opacity: 0.5;
+}
+
+.delete-beer-btn:hover {
+  opacity: 1 !important;
+  color: var(--error-color);
+}
+
+.empty-list {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  padding: 20px;
+}
+
+/* Пустое состояние */
+.no-location {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+/* Загрузка */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  margin-bottom: 16px;
+}
+
+.spinner-ring {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Адаптивность */
+@media (max-width: 1024px) {
+  .taps-layout {
+    flex-direction: column;
+  }
+  
+  .taps-sidebar {
+    width: 100%;
+  }
+  
+  .taps-sidebar .card {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .TapsPage {
+    padding: 12px;
+  }
+
+  .TapsPage .card {
+    padding: 14px;
+  }
+
+  .locations-tabs {
+    gap: 6px;
+  }
+
+  .location-tab {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  .taps-table.sheets-style th,
+  .taps-table.sheets-style td {
+    padding: 6px 8px;
+    font-size: 0.8rem;
+  }
+  
+  .col-current,
+  .col-next {
+    min-width: 150px;
+  }
+}

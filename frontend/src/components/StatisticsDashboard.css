@@ -1,0 +1,113 @@
+/**
+ * Стили для компонента статистики
+ */
+
+.StatisticsDashboard {
+  width: 100%;
+}
+
+.statistics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.statistics-header h2 {
+  margin: 0;
+}
+
+.statistics-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.StatisticsDashboard .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.StatisticsDashboard .stat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 2px solid var(--border-color);
+  transition: var(--transition-base);
+}
+
+.StatisticsDashboard .stat-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.StatisticsDashboard .stat-icon {
+  font-size: var(--font-3xl);
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-md);
+}
+
+.StatisticsDashboard .stat-content {
+  flex: 1;
+}
+
+.StatisticsDashboard .stat-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-xs);
+}
+
+.StatisticsDashboard .stat-value {
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.StatisticsDashboard .charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.StatisticsDashboard .chart-card {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.StatisticsDashboard .chart-card h3 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .StatisticsDashboard .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .StatisticsDashboard .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

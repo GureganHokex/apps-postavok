@@ -1,0 +1,135 @@
+/**
+ * Стили для компонента MetadataTab.
+ */
+
+.MetadataTab .metadata-section {
+  margin-bottom: var(--spacing-xl);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.MetadataTab .metadata-section:last-child {
+  border-bottom: none;
+}
+
+.MetadataTab .metadata-section h3 {
+  margin-top: 0;
+  color: var(--text-primary);
+  font-size: var(--font-xl);
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.MetadataTab .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.MetadataTab .summary-item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-base);
+}
+
+.MetadataTab .summary-item:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.MetadataTab .summary-item .label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.MetadataTab .summary-item .value {
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.MetadataTab .contact-group {
+  margin-bottom: var(--spacing-lg);
+}
+
+.MetadataTab .contact-group h4 {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.MetadataTab .contact-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.MetadataTab .contact-group li {
+  padding: var(--spacing-md);
+  background-color: var(--bg-tertiary);
+  margin-bottom: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  border-left: 3px solid transparent;
+}
+
+.MetadataTab .contact-group li:hover {
+  background-color: var(--bg-primary);
+  border-left-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.MetadataTab .contact-group a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  transition: var(--transition-fast);
+}
+
+.MetadataTab .contact-group a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.MetadataTab .extra-text-list {
+  list-style: none;
+  padding: 0;
+}
+
+.MetadataTab .extra-text-list li {
+  padding: var(--spacing-md);
+  background-color: rgba(243, 156, 18, 0.1);
+  margin-bottom: var(--spacing-sm);
+  border-left: 4px solid var(--warning-color);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.MetadataTab .extra-text-list li:hover {
+  background-color: rgba(243, 156, 18, 0.15);
+  box-shadow: var(--shadow-sm);
+}
+
+.MetadataTab .empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: var(--spacing-md);
+  text-align: center;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .MetadataTab .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

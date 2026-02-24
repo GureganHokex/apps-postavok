@@ -1,0 +1,32 @@
+.sortable-header {
+  cursor: default;
+  user-select: none;
+  position: relative;
+}
+
+.sortable-header.sortable {
+  cursor: pointer;
+}
+
+.sortable-header.sortable:hover {
+  background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sort-indicator {
+  font-size: 0.875rem;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.sortable-header.sorted-asc .sort-indicator,
+.sortable-header.sorted-desc .sort-indicator {
+  opacity: 1;
+  color: var(--color-primary, #007bff);
+}

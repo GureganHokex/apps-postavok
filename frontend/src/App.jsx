@@ -1,11 +1,16 @@
 /**
  * Главный компонент приложения.
+ * Режим страницы: data-page="admin" (или ?page=admin) — админ-панель; иначе — основное приложение (бармен/пользователь).
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { Routes, Route, NavLink, Navigate, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useAuth } from './contexts/AuthContext';
+import LoginForm from './components/LoginForm';
+import AdminPanel from './components/AdminPanel';
 import FileUpload from './components/FileUpload';
 import ParsedTable from './components/ParsedTable';
 import MetadataTab from './components/MetadataTab';
@@ -17,6 +22,171 @@ import TapsPage from './components/TapsPage';
 import SupplierSettings from './components/SupplierSettings';
 import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
+
+function getPageType() {
+  const root = document.getElementById('root');
+  const fromRoot = root?.getAttribute('data-page');
+  if (fromRoot) return fromRoot;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('page') || '';
+}
+
+function AdminGate() {
+  const { user, loading, login, logout, isAdmin } = useAuth();
+  const [loginError, setLoginError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleLogin = async (username, password) => {
+    setLoginError('');
+    setSubmitting(true);
+    try {
+      const data = await login(username, password);
+      if (!data?.is_admin) {
+        await logout();
+        setLoginError('Доступ только для администратора.');
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error ?? err.response?.data?.detail ?? (err.response ? `${err.response.status}: ${err.response.statusText}` : err.message);
+      setLoginError(msg || 'Ошибка входа');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <div className="app-gate-loading">Загрузка…</div>;
+  if (!user) {
+    return (
+      <div className="app-gate">
+        <LoginForm
+          title="Админ-панель"
+          onSubmit={handleLogin}
+          error={loginError}
+          loading={submitting}
+        />
+      </div>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <div className="app-gate">
+        <div className="app-gate-message">
+          <p>Доступ только для администратора.</p>
+          <button type="button" className="btn-logout" onClick={logout}>
+            Выйти
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return <LoggedInLayout fullAccess role={user?.user?.role} />;
+}
+
+function MainGate() {
+  const { user, loading, login } = useAuth();
+  const [loginError, setLoginError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleLogin = async (username, password) => {
+    setLoginError('');
+    setSubmitting(true);
+    try {
+      await login(username, password);
+    } catch (err) {
+      const msg = err.response?.data?.error ?? err.response?.data?.detail ?? (err.response ? `${err.response.status}: ${err.response.statusText}` : err.message);
+      setLoginError(msg || 'Ошибка входа');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <div className="app-gate-loading">Загрузка…</div>;
+  if (!user) {
+    return (
+      <div className="app-gate">
+        <LoginForm
+          title="Вход"
+          onSubmit={handleLogin}
+          error={loginError}
+          loading={submitting}
+        />
+      </div>
+    );
+  }
+  return <LoggedInLayout fullAccess={false} role={user?.user?.role} />;
+}
+
+function LayoutHeader({ isAdmin }) {
+  const { logout } = useAuth();
+  return (
+    <motion.header
+      className="App-header"
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="header-content">
+        <div>
+          <NavLink to="/" className="header-title-link">
+            <motion.h1 initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.5 }}>
+              Пивной импортер
+            </motion.h1>
+          </NavLink>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 0.9 }} transition={{ delay: 0.4, duration: 0.5 }}>
+            Парсинг прайсов для баров
+          </motion.p>
+        </div>
+        <div className="header-actions">
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => 'btn-admin-header' + (isActive ? ' active' : '')} title="Админ-панель">
+              Админ-панель
+            </NavLink>
+          )}
+          <button type="button" className="btn-logout-header" onClick={logout} title="Выйти">
+            Выйти
+          </button>
+          <ThemeToggle />
+        </div>
+      </div>
+    </motion.header>
+  );
+}
+
+function Layout({ isAdmin }) {
+  return (
+    <>
+      <LayoutHeader isAdmin={isAdmin} />
+      <Outlet />
+    </>
+  );
+}
+
+function LoggedInLayout({ fullAccess, role }) {
+  const isAdmin = fullAccess || role === 'admin';
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
+            boxShadow: 'var(--shadow-lg)',
+            borderRadius: 'var(--radius-md)',
+          },
+          success: { iconTheme: { primary: 'var(--success-color)', secondary: 'white' } },
+          error: { iconTheme: { primary: 'var(--danger-color)', secondary: 'white' } },
+        }}
+      />
+      <Routes>
+        <Route element={<Layout isAdmin={isAdmin} />}>
+          <Route path="/admin" element={isAdmin ? <AdminPanel /> : <Navigate to="/" replace />} />
+          <Route path="/*" element={<AppContent fullAccess={fullAccess} role={role} />} />
+        </Route>
+      </Routes>
+    </QueryClientProvider>
+  );
+}
 
 // Настройка React Query с улучшенным кэшированием
 const queryClient = new QueryClient({
@@ -37,12 +207,28 @@ const queryClient = new QueryClient({
   },
 });
 
-function App() {
+function AppContent({ fullAccess = false, role = 'user' }) {
   const [currentFile, setCurrentFile] = useState(null);
   const [items, setItems] = useState([]);
   const [metadata, setMetadata] = useState(null);
-  const [activeTab, setActiveTab] = useState('upload');
+  const isAdmin = fullAccess || role === 'admin';
+  const defaultTab = isAdmin ? 'upload' : 'taps';
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [selectedItems, setSelectedItems] = useState([]);
+
+  const allowedTabs = useMemo(() => {
+    if (fullAccess || role === 'admin') return new Set(['upload', 'items', 'metadata', 'order', 'statistics', 'orders-history', 'taps', 'suppliers']);
+    if (role === 'bartender') return new Set(['taps', 'orders-history']);
+    return new Set(['taps']);
+  }, [fullAccess, role]);
+
+  useEffect(() => {
+    if (!allowedTabs.has(activeTab)) setActiveTab(isAdmin ? 'upload' : 'taps');
+  }, [allowedTabs, isAdmin]);
+
+  const setActiveTabSafe = useCallback((tab) => {
+    setActiveTab((prev) => (allowedTabs.has(tab) ? tab : prev));
+  }, [allowedTabs]);
 
   const handleFileUploaded = (fileData) => {
     setCurrentFile(fileData);
@@ -75,146 +261,98 @@ function App() {
 
   const selectedCount = useMemo(() => selectedItems.length, [selectedItems]);
 
-  // Клавиатурные сокращения для навигации
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ctrl+1-5 для переключения вкладок
       if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '5') {
         e.preventDefault();
         const tabIndex = parseInt(e.key) - 1;
         const tabs = ['upload', 'items', 'metadata', 'order', 'orders-history'];
-        if (tabs[tabIndex] && (tabIndex === 0 || currentFile)) {
+        if (tabs[tabIndex] && (tabIndex === 0 || currentFile) && allowedTabs.has(tabs[tabIndex])) {
           setActiveTab(tabs[tabIndex]);
         }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentFile]);
+  }, [currentFile, allowedTabs]);
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <div className="App">
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              boxShadow: 'var(--shadow-lg)',
-              borderRadius: 'var(--radius-md)',
-            },
-            success: {
-              iconTheme: {
-                primary: 'var(--success-color)',
-                secondary: 'white',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: 'var(--danger-color)',
-                secondary: 'white',
-              },
-            },
-          }}
-        />
-        
-      <motion.header
-        className="App-header"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="header-content">
-          <div>
-            <motion.h1
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              Пивной импортер
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.9 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-            >
-              Парсинг прайсов для баров
-            </motion.p>
-          </div>
-          <ThemeToggle />
-        </div>
-      </motion.header>
-
+      <div className="App">
         <nav className="App-nav">
-          <button
-            className={activeTab === 'upload' ? 'active' : ''}
-            onClick={() => setActiveTab('upload')}
-            aria-label="Загрузка файлов"
-          >
-            📤 Загрузка файлов
-          </button>
-          {currentFile && (
+          {allowedTabs.has('upload') && (
+            <button
+              className={activeTab === 'upload' ? 'active' : ''}
+              onClick={() => setActiveTabSafe('upload')}
+              aria-label="Загрузка файлов"
+            >
+              📤 Загрузка файлов
+            </button>
+          )}
+          {allowedTabs.has('items') && currentFile && (
             <>
               <button
                 className={activeTab === 'items' ? 'active' : ''}
-                onClick={() => setActiveTab('items')}
+                onClick={() => setActiveTabSafe('items')}
                 aria-label="Позиции"
               >
                 📋 Позиции {items.length > 0 && `(${items.length})`}
               </button>
               <button
                 className={activeTab === 'metadata' ? 'active' : ''}
-                onClick={() => setActiveTab('metadata')}
+                onClick={() => setActiveTabSafe('metadata')}
                 aria-label="Метаданные"
               >
                 ℹ️ Метаданные
               </button>
+              <button
+                className={activeTab === 'order' ? 'active' : ''}
+                onClick={() => setActiveTabSafe('order')}
+                aria-label="Формирование заказа"
+              >
+                🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
+              </button>
+              <button
+                className={activeTab === 'statistics' ? 'active' : ''}
+                onClick={() => setActiveTabSafe('statistics')}
+                aria-label="Статистика"
+              >
+                📊 Статистика
+              </button>
+            </>
+          )}
+          {allowedTabs.has('orders-history') && (
             <button
-              className={activeTab === 'order' ? 'active' : ''}
-              onClick={() => setActiveTab('order')}
-              aria-label="Формирование заказа"
+              className={activeTab === 'orders-history' ? 'active' : ''}
+              onClick={() => setActiveTabSafe('orders-history')}
+              aria-label="История заказов"
             >
-              🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
+              📜 История заказов
             </button>
+          )}
+          {allowedTabs.has('taps') && (
             <button
-              className={activeTab === 'statistics' ? 'active' : ''}
-              onClick={() => setActiveTab('statistics')}
-              aria-label="Статистика"
+              className={activeTab === 'taps' ? 'active' : ''}
+              onClick={() => setActiveTabSafe('taps')}
+              aria-label="Краны"
             >
-              📊 Статистика
+              🍺 Краны
             </button>
-          </>
-        )}
-        <button
-          className={activeTab === 'orders-history' ? 'active' : ''}
-          onClick={() => setActiveTab('orders-history')}
-          aria-label="История заказов"
-        >
-          📜 История заказов
-        </button>
-        <button
-          className={activeTab === 'taps' ? 'active' : ''}
-          onClick={() => setActiveTab('taps')}
-          aria-label="Краны"
-        >
-          🍺 Краны
-        </button>
-        <button
-          className={activeTab === 'suppliers' ? 'active' : ''}
-          onClick={() => setActiveTab('suppliers')}
-          aria-label="Настройки поставщиков"
-        >
-          ⚙️ Настройки поставщиков
-        </button>
-      </nav>
+          )}
+          {allowedTabs.has('suppliers') && (
+            <button
+              className={activeTab === 'suppliers' ? 'active' : ''}
+              onClick={() => setActiveTabSafe('suppliers')}
+              aria-label="Настройки поставщиков"
+            >
+              ⚙️ Настройки поставщиков
+            </button>
+          )}
+        </nav>
 
       <main className="App-main">
         <AnimatePresence mode="wait">
-          {activeTab === 'upload' && (
+          {(activeTab === 'upload' || activeTab === 'parse') && (
             <motion.div
               key="upload"
               initial={{ opacity: 0, x: -20 }}
@@ -327,8 +465,16 @@ function App() {
           )}
         </AnimatePresence>
       </main>
-        </div>
-      </QueryClientProvider>
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+function App() {
+  const isAdminPage = getPageType() === 'admin';
+  return (
+    <ErrorBoundary>
+      {isAdminPage ? <AdminGate /> : <MainGate />}
     </ErrorBoundary>
   );
 }

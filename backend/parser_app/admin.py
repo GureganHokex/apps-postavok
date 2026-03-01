@@ -3,7 +3,7 @@
 """
 
 from django.contrib import admin
-from .models import File, ParsedItem, FileMetadata, Order, Supplier
+from .models import File, ParsedItem, FileMetadata, Order, Supplier, UserProfile
 
 
 @admin.register(File)
@@ -41,4 +41,12 @@ class SupplierAdmin(admin.ModelAdmin):
     """Админка для настроек поставщиков (маппинг колонок)."""
     list_display = ('id', 'name', 'updated_at')
     search_fields = ('name',)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    """Роли пользователей. Пользователей можно создавать в Django Admin (Users), затем задать роль здесь."""
+    list_display = ('user', 'role')
+    list_filter = ('role',)
+    search_fields = ('user__username',)
 

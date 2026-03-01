@@ -2,9 +2,44 @@
 Модели данных для приложения парсинга прайсов.
 """
 
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator
 import json
+
+
+class UserProfile(models.Model):
+    """
+    Профиль пользователя с ролью для разграничения прав.
+    """
+    ROLE_ADMIN = 'admin'
+    ROLE_BARTENDER = 'bartender'
+    ROLE_USER = 'user'
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, 'Администратор'),
+        (ROLE_BARTENDER, 'Бармен'),
+        (ROLE_USER, 'Пользователь'),
+    ]
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        verbose_name='Пользователь',
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default=ROLE_USER,
+        verbose_name='Роль',
+    )
+
+    class Meta:
+        verbose_name = 'Профиль пользователя'
+        verbose_name_plural = 'Профили пользователей'
+
+    def __str__(self):
+        return f"{self.user.username} ({self.get_role_display()})"
 
 
 class Supplier(models.Model):
@@ -381,6 +416,10 @@ class Tap(models.Model):
         choices=STATUS_CHOICES,
         default='active',
         verbose_name='Статус'
+    )
+    is_visible = models.BooleanField(
+        default=True,
+        verbose_name='Видимость'
     )
     updated_at = models.DateTimeField(
         auto_now=True,

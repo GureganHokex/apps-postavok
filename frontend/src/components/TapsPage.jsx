@@ -17,9 +17,14 @@ import {
   deleteAvailableBeer,
   exportLocationTaps,
 } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 import './TapsPage.css';
 
 function TapsPage() {
+  const { role, isAdmin } = useAuth();
+  const canAddDeleteLocationsAndTaps = isAdmin;
+  const canEditTapsContent = isAdmin || role === 'bartender';
+  const canOnlyChangeVisibility = role === 'user';
   const [locations, setLocations] = useState([]);
   const [activeLocationId, setActiveLocationId] = useState(null);
   const [activeLocation, setActiveLocation] = useState(null);
@@ -339,7 +344,7 @@ function TapsPage() {
           <div className="card">
             <div className="taps-header">
               <h2>Управление кранами</h2>
-              {activeLocation && (
+              {canAddDeleteLocationsAndTaps && activeLocation && (
                 <button
                   className="button button-secondary"
                   onClick={async () => {
@@ -367,20 +372,22 @@ function TapsPage() {
                 >
                   <span className="location-name">{location.name}</span>
                   <span className="location-count">{location.taps_count || 0}</span>
-                  <button
-                    className="delete-location-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteLocation(location.id);
-                    }}
-                    title="Удалить локацию"
-                  >
-                    ×
-                  </button>
+                  {canAddDeleteLocationsAndTaps && (
+                    <button
+                      className="delete-location-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteLocation(location.id);
+                      }}
+                      title="Удалить локацию"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))}
               
-              {isAddingLocation ? (
+              {canAddDeleteLocationsAndTaps && (isAddingLocation ? (
                 <div className="add-location-form">
                   <input
                     type="text"
@@ -403,10 +410,11 @@ function TapsPage() {
                 >
                   + Локация
                 </button>
-              )}
+              )) }
             </div>
 
-            {/* Легенда цветов */}
+            {/* Легенда цветов — только для редактирования */}
+            {!canOnlyChangeVisibility && (
             <div className="color-legend">
               <span className="legend-title">Цвета:</span>
               <div className="legend-item">
@@ -419,6 +427,7 @@ function TapsPage() {
               </div>
               <span className="legend-hint">(клик по полоске меняет цвет)</span>
             </div>
+            )}
 
             {/* Поиск по кранам */}
             {activeLocation && activeLocation.taps && activeLocation.taps.length > 0 && (
@@ -450,9 +459,13 @@ function TapsPage() {
                     <tr>
                       <th className="col-num">№</th>
                       <th className="col-current">Что сейчас</th>
-                      <th className="col-next">След 1</th>
-                      <th className="col-next">След 2</th>
-                      <th className="col-actions"></th>
+                      {!canOnlyChangeVisibility && (
+                        <>
+                          <th className="col-next">След 1</th>
+                          <th className="col-next">След 2</th>
+                        </>
+                      )}
+                      <th className="col-actions">{canOnlyChangeVisibility ? 'Видимость' : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -463,10 +476,35 @@ function TapsPage() {
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className={`tap-row status-${tap.status}`}
+                          className={`tap-row status-${tap.status} ${tap.is_visible === false ? 'tap-hidden' : ''}`}
                         >
                           <td className="col-num">{tap.position}</td>
-                          
+                          {canOnlyChangeVisibility ? (
+                            <>
+                              <td className="col-current" colSpan={2}>
+                                <span>{tap.current_beer || '—'}</span>
+                              </td>
+                              <td className="col-actions">
+                                <label className="tap-visibility-toggle" title={tap.is_visible !== false ? 'Скрыть' : 'Показать'}>
+                                  <input
+                                    type="checkbox"
+                                    checked={tap.is_visible !== false}
+                                    onChange={async () => {
+                                      try {
+                                        await updateTap(tap.id, { is_visible: !(tap.is_visible !== false) });
+                                        loadActiveLocation();
+                                        toast.success(tap.is_visible !== false ? 'Кран скрыт' : 'Кран показан');
+                                      } catch (err) {
+                                        toast.error('Ошибка');
+                                      }
+                                    }}
+                                  />
+                                  <span>{tap.is_visible !== false ? '👁' : '👁‍🗨'}</span>
+                                </label>
+                              </td>
+                            </>
+                          ) : (
+                            <>
                           {/* Текущее пиво */}
                           <td
                             className="col-current"
@@ -583,23 +621,29 @@ function TapsPage() {
                             >
                               ⟳
                             </button>
-                            <button
-                              className="btn-delete-tap"
-                              onClick={() => handleDeleteTap(tap.id)}
-                              title="Удалить кран"
-                            >
-                              🗑
-                            </button>
+                            {canAddDeleteLocationsAndTaps && (
+                              <button
+                                className="btn-delete-tap"
+                                onClick={() => handleDeleteTap(tap.id)}
+                                title="Удалить кран"
+                              >
+                                🗑
+                              </button>
+                            )}
                           </td>
+                            </>
+                          )}
                         </motion.tr>
                       ))}
                     </AnimatePresence>
                   </tbody>
                 </table>
                 
-                <button className="add-tap-btn" onClick={handleAddTap}>
-                  + Добавить кран
-                </button>
+                {canAddDeleteLocationsAndTaps && (
+                  <button className="add-tap-btn" onClick={handleAddTap}>
+                    + Добавить кран
+                  </button>
+                )}
               </div>
             ) : (
               <div className="no-location">
@@ -609,8 +653,8 @@ function TapsPage() {
           </div>
         </div>
 
-        {/* Боковая панель с доступным пивом */}
-        {activeLocation && (
+        {/* Боковая панель с доступным пивом — только для тех, кто может редактировать краны */}
+        {activeLocation && !canOnlyChangeVisibility && (
           <div className="taps-sidebar">
             <div className="card">
               <h3>Доступные позиции</h3>

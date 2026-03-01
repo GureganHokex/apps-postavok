@@ -8,23 +8,26 @@ import logging
 import traceback
 from pathlib import Path
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.http import FileResponse, JsonResponse
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, parser_classes
+from rest_framework.decorators import action, api_view, parser_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
 from .models import (
     File, ParsedItem, FileMetadata, Order, Supplier,
-    TapLocation, Tap, AvailableBeer, TapChangeHistory
+    TapLocation, Tap, AvailableBeer, TapChangeHistory, UserProfile
 )
 from .validators import ParsedItemValidator
 from .serializers import (
     FileSerializer, ParsedItemSerializer, FileMetadataSerializer,
     OrderSerializer, OrderCreateSerializer, SupplierSerializer,
-    TapLocationSerializer, TapLocationListSerializer, TapSerializer, AvailableBeerSerializer
+    TapLocationSerializer, TapLocationListSerializer, TapSerializer, AvailableBeerSerializer,
+    UserSerializer, UserCreateSerializer, UserUpdateSerializer,
 )
 from .parsers.pdf_parser import PDFParser
 from .parsers.excel_parser import ExcelParser
@@ -34,13 +37,21 @@ from .normalizers import DataNormalizer
 from .exporters import OrderExporter, TapsExporter
 from .utils import detect_file_type, extract_zip
 from .untappd_client import UntappdClient
+from .permissions import (
+    get_user_role,
+    IsAdmin,
+    IsAdminOrBartender,
+    CanEditTapsContent,
+)
+from .auth_views import SessionAuthenticationNoCSRF
 
 logger = logging.getLogger(__name__)
 
 
 class FileViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с файлами."""
+    """ViewSet для работы с файлами. Только админ."""
     
+    permission_classes = [IsAuthenticated, IsAdmin]
     queryset = File.objects.all()
     serializer_class = FileSerializer
     
@@ -588,14 +599,15 @@ class FileViewSet(viewsets.ModelViewSet):
 
 
 class SupplierViewSet(viewsets.ModelViewSet):
-    """ViewSet для настроек поставщиков (маппинг колонок)."""
+    """ViewSet для настроек поставщиков (маппинг колонок). Только админ."""
+    permission_classes = [IsAuthenticated, IsAdmin]
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
 
 
 class ParsedItemViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с распарсенными позициями."""
-    
+    """ViewSet для работы с распарсенными позициями. Только админ."""
+    permission_classes = [IsAuthenticated, IsAdmin]
     queryset = ParsedItem.objects.all()
     serializer_class = ParsedItemSerializer
     
@@ -665,11 +677,16 @@ class ParsedItemViewSet(viewsets.ModelViewSet):
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с заказами."""
+    """ViewSet для работы с заказами. Список/просмотр — админ и бармен; создание и экспорт — только админ."""
     
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
-    
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), IsAdminOrBartender()]
+        return [IsAuthenticated(), IsAdmin()]
+
     def create(self, request):
         """
         Создает новый заказ.
@@ -723,10 +740,11 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdmin])
 @parser_classes([MultiPartParser, FormParser])
 def upload_file(request):
     """
-    Загружает файл на сервер.
+    Загружает файл на сервер. Только админ.
     
     POST /api/upload/
     Body: multipart/form-data с полем 'file'
@@ -794,15 +812,22 @@ def upload_file(request):
 
 
 class TapLocationViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с локациями кранов."""
+    """ViewSet для работы с локациями кранов. Просмотр — все авторизованные; создание/изменение/удаление/экспорт — админ."""
     
     queryset = TapLocation.objects.prefetch_related('taps', 'available_beers')
-    
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        if self.action == 'taps':
+            return [IsAuthenticated()] if self.request.method == 'GET' else [IsAuthenticated(), IsAdmin()]
+        return [IsAuthenticated(), IsAdmin()]
+
     def get_serializer_class(self):
         if self.action == 'list':
             return TapLocationListSerializer
         return TapLocationSerializer
-    
+
     @action(detail=True, methods=['get', 'post'])
     def taps(self, request, pk=None):
         """
@@ -924,25 +949,36 @@ class TapLocationViewSet(viewsets.ModelViewSet):
 
 
 class TapViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с кранами."""
+    """ViewSet для работы с кранами. Пользователь может менять только is_visible; бармен и админ — все поля."""
     
     queryset = Tap.objects.select_related('location')
     serializer_class = TapSerializer
-    
+
+    def get_permissions(self):
+        if self.action in ('create', 'destroy'):
+            return [IsAuthenticated(), IsAdmin()]
+        if self.action == 'reorder':
+            return [IsAuthenticated(), CanEditTapsContent()]
+        return [IsAuthenticated()]
+
     def update(self, request, *args, **kwargs):
-        """Обновление крана."""
+        """Обновление крана. Для роли user разрешено только поле is_visible."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        
+        role = get_user_role(request.user)
+        data = request.data
+        if role == UserProfile.ROLE_USER:
+            data = {k: v for k, v in request.data.items() if k == 'is_visible'}
+
         # Сохраняем старые значения для истории
         old_brewery = instance.brewery
         old_beer_name = instance.beer_name
         old_price = instance.price_per_liter
         old_next_1 = instance.next_beer_1
         old_next_2 = instance.next_beer_2
-        
+
         serializer = self.get_serializer(
-            instance, data=request.data, partial=partial
+            instance, data=data, partial=partial
         )
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -1068,11 +1104,16 @@ class TapViewSet(viewsets.ModelViewSet):
 
 
 class AvailableBeerViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с доступным пивом."""
+    """ViewSet для работы с доступным пивом. Просмотр — все; создание/изменение — админ."""
     
     queryset = AvailableBeer.objects.select_related('location')
     serializer_class = AvailableBeerSerializer
-    
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsAdmin()]
+
     def get_queryset(self):
         """Фильтрация по локации если указана."""
         queryset = super().get_queryset()
@@ -1135,4 +1176,67 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
                 {'error': f'Ошибка сервера: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+User = get_user_model()
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """Управление пользователями (админ-панель). Только для роли admin. SessionAuthenticationNoCSRF — SPA с другого origin не шлёт CSRF токен."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
+    permission_classes = [IsAuthenticated, IsAdmin]
+    queryset = User.objects.all().order_by('id')
+    serializer_class = UserSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UserCreateSerializer
+        if self.action in ('update', 'partial_update'):
+            return UserUpdateSerializer
+        return UserSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = UserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = UserUpdateSerializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.validated_data.get('role')
+        first_name = serializer.validated_data.get('first_name')
+        last_name = serializer.validated_data.get('last_name')
+        email = serializer.validated_data.get('email')
+        password = serializer.validated_data.get('password')
+        if first_name is not None:
+            instance.first_name = first_name
+        if last_name is not None:
+            instance.last_name = last_name
+        if email is not None:
+            instance.email = email
+        if password:
+            instance.set_password(password)
+        instance.save()
+        if role is not None:
+            profile, _ = UserProfile.objects.get_or_create(user=instance, defaults={'role': role})
+            profile.role = role
+            profile.save()
+        return Response(UserSerializer(instance).data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance == request.user:
+            return Response(
+                {'error': 'Нельзя удалить самого себя.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 

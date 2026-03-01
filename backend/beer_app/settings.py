@@ -4,9 +4,37 @@ Django settings for beer_app project.
 
 from pathlib import Path
 import os
+import re
 
-# Базовая директория проекта
+# Базовая директория проекта (backend/)
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Загрузка .env из корня репозитория (родитель backend/) и из backend/
+def _load_dotenv_paths():
+    try:
+        from dotenv import load_dotenv
+        root_env = BASE_DIR.parent / '.env'
+        backend_env = BASE_DIR / '.env'
+        load_dotenv(root_env)
+        load_dotenv(backend_env)
+        # Поддержка формата "export KEY='value'" в .env
+        for p in (root_env, backend_env):
+            if p.exists():
+                with open(p) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        m = re.match(r"^export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line)
+                        if m:
+                            key, val = m.group(1), m.group(2).strip()
+                            if val.startswith("'") and val.endswith("'") or val.startswith('"') and val.endswith('"'):
+                                val = val[1:-1].replace('\\' + val[0], val[0])
+                            os.environ.setdefault(key, val)
+    except ImportError:
+        pass
+
+_load_dotenv_paths()
 
 # Секрет и режим дебага берём из окружения
 SECRET_KEY = os.getenv(
@@ -20,9 +48,11 @@ ALLOWED_HOSTS = [
     host for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
     if host
 ]
+# Для запросов с фронта (например localhost:3000) при пустом env задаём доверенные источники для разработки
+_default_csrf_origins = os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS') or 'http://localhost:3000,http://127.0.0.1:3000'
 CSRF_TRUSTED_ORIGINS = [
-    origin for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
-    if origin
+    origin.strip() for origin in _default_csrf_origins.split(',')
+    if origin.strip()
 ]
 
 # Application definition
@@ -35,7 +65,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'parser_app',
+    'parser_app.apps.ParserAppConfig',
 ]
 
 MIDDLEWARE = [
@@ -114,6 +144,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
@@ -124,11 +160,10 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Настройки CORS
+# Настройки CORS (credentials=True нужны для сессионной авторизации)
 if DEBUG:
-    # В режиме разработки разрешаем все источники (избегаем Network Error при разных портах)
     CORS_ALLOW_ALL_ORIGINS = True
-    CORS_ALLOW_CREDENTIALS = False
+    CORS_ALLOW_CREDENTIALS = True
 else:
     _default_cors = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://gureganhokex.github.io"
     _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", _default_cors)
@@ -179,3 +214,7 @@ LOGGING = {
 
 # Примечание: Интеграция с Untappd теперь использует веб-скрейпинг
 # API ключи больше не требуются
+
+# Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')  # В production обязательно задать

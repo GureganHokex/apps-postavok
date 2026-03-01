@@ -2,11 +2,14 @@
 Serializers для API endpoints.
 """
 
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import (
     File, ParsedItem, FileMetadata, Order, Supplier,
-    TapLocation, Tap, AvailableBeer
+    TapLocation, Tap, AvailableBeer, UserProfile
 )
+
+User = get_user_model()
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -102,10 +105,10 @@ class TapSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Tap
-        fields = ['id', 'location', 'position', 'brewery', 
+        fields = ['id', 'location', 'position', 'brewery',
                  'beer_name', 'price_per_liter', 'next_beer_1',
-                 'next_beer_2', 'color_current', 'color_next1', 
-                 'color_next2', 'status', 'current_beer', 'updated_at']
+                 'next_beer_2', 'color_current', 'color_next1',
+                 'color_next2', 'status', 'is_visible', 'current_beer', 'updated_at']
         read_only_fields = ['updated_at']
     
     def get_current_beer(self, obj):
@@ -171,4 +174,62 @@ class TapLocationListSerializer(serializers.ModelSerializer):
     
     def get_taps_count(self, obj):
         return obj.taps.count()
+
+
+# --- Управление пользователями (админ-панель) ---
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Список пользователей: id, username, имена, роль."""
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'role', 'is_active']
+        read_only_fields = ['id', 'username']
+
+    def get_role(self, obj):
+        try:
+            return obj.profile.role
+        except UserProfile.DoesNotExist:
+            return UserProfile.ROLE_USER
+
+
+class UserCreateSerializer(serializers.Serializer):
+    """Создание пользователя."""
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True, min_length=1)
+    role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, default=UserProfile.ROLE_USER)
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError('Пользователь с таким логином уже существует.')
+        return value
+
+    def create(self, validated_data):
+        role = validated_data.pop('role')
+        password = validated_data.pop('password')
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email') or '',
+            password=password,
+            first_name=validated_data.get('first_name') or '',
+            last_name=validated_data.get('last_name') or '',
+        )
+        profile, _ = UserProfile.objects.get_or_create(user=user, defaults={'role': role})
+        profile.role = role
+        profile.save()
+        return user
+
+
+class UserUpdateSerializer(serializers.Serializer):
+    """Обновление пользователя: роль, имена, опционально пароль."""
+    role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, required=False)
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    password = serializers.CharField(required=False, allow_blank=True, write_only=True, min_length=1)
 

@@ -1,0 +1,161 @@
+.admin-panel {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+}
+
+.admin-panel-loading {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.admin-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.admin-panel-header h2 {
+  margin: 0;
+  font-size: var(--font-2xl);
+  color: var(--text-primary);
+}
+
+.admin-panel-btn-add {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-base);
+}
+
+.admin-panel-btn-add:hover {
+  opacity: 0.9;
+}
+
+.admin-panel-form,
+.admin-panel-edit-form {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.admin-panel-form h3,
+.admin-panel-edit-form h3 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: var(--font-lg);
+}
+
+.admin-panel-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.admin-panel-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.admin-panel-form-grid input,
+.admin-panel-form-grid select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.admin-panel-form-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.admin-panel-form-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-sm);
+}
+
+.admin-panel-form-actions button[type="submit"] {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.admin-panel-form-actions button[type="button"] {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.admin-panel-table-wrap {
+  overflow-x: auto;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.admin-panel-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-panel-table th,
+.admin-panel-table td {
+  padding: var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.admin-panel-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-panel-table tbody tr:hover {
+  background: var(--bg-secondary);
+}
+
+.admin-panel-btn-edit,
+.admin-panel-btn-delete {
+  padding: 0.35rem 0.75rem;
+  margin-right: 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  border: none;
+}
+
+.admin-panel-btn-edit {
+  background: var(--primary-color);
+  color: white;
+}
+
+.admin-panel-btn-delete {
+  background: var(--danger-color, #dc3545);
+  color: white;
+}
+
+.admin-panel-btn-edit:hover,
+.admin-panel-btn-delete:hover {
+  opacity: 0.9;
+}
+
+.admin-panel-edit-form .admin-panel-form-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}

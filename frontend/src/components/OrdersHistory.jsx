@@ -7,9 +7,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getOrders, downloadOrder, getOrder, createOrder, getOrderStatistics } from '../api';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import './OrdersHistory.css';
 
 function OrdersHistory() {
+  const { isAdmin } = useAuth();
   const [filters, setFilters] = useState({
     date_from: '',
     date_to: '',
@@ -99,7 +101,7 @@ function OrdersHistory() {
       date_to: filters.date_to || undefined,
     }),
     staleTime: 60000,
-    enabled: true,
+    enabled: isAdmin,
   });
   const stats = statsData || null;
 
@@ -334,19 +336,23 @@ function OrdersHistory() {
                     >
                       Детали
                     </button>
-                    <button
-                      className="button button-secondary"
-                      onClick={() => handleDuplicateOrder(order.id)}
-                      title="Создать копию этого заказа"
-                    >
-                      🔄 Повторить
-                    </button>
-                    <button
-                      className="button button-success"
-                      onClick={() => handleDownload(order.id)}
-                    >
-                      Скачать
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          className="button button-secondary"
+                          onClick={() => handleDuplicateOrder(order.id)}
+                          title="Создать копию этого заказа"
+                        >
+                          🔄 Повторить
+                        </button>
+                        <button
+                          className="button button-success"
+                          onClick={() => handleDownload(order.id)}
+                        >
+                          Скачать
+                        </button>
+                      </>
+                    )}
                   </div>
                 </motion.div>
               ))

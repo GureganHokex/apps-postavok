@@ -8,21 +8,83 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Понятное сообщение при Network Error (бэкенд не запущен или недоступен)
+// Обработка ответов: 401 — не авторизован (приложение покажет форму входа)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       error.message = `Сервер недоступен. Запустите backend: cd backend && source venv/bin/activate && python manage.py runserver (или DJANGO_DEBUG=true для разработки).`;
     }
+    if (error.response?.status === 401) {
+      window.dispatchEvent(new CustomEvent('api:unauthorized'));
+    }
     return Promise.reject(error);
   }
 );
+
+// ==================== Auth API ====================
+
+/**
+ * Вход. Возвращает { user: { id, username, role }, is_admin }.
+ */
+export const authLogin = async (username, password) => {
+  const response = await api.post('/auth/login/', { username, password });
+  return response.data;
+};
+
+/**
+ * Выход.
+ */
+export const authLogout = async () => {
+  await api.post('/auth/logout/');
+};
+
+/**
+ * Текущий пользователь. 401 если не авторизован.
+ */
+export const authMe = async () => {
+  const response = await api.get('/auth/me/');
+  return response.data;
+};
+
+// ==================== Users (админ-панель) ====================
+
+/**
+ * Список пользователей. Только админ.
+ */
+export const getUsers = async () => {
+  const response = await api.get('/users/');
+  return response.data;
+};
+
+/**
+ * Создать пользователя. Только админ.
+ */
+export const createUser = async (data) => {
+  const response = await api.post('/users/', data);
+  return response.data;
+};
+
+/**
+ * Обновить пользователя (роль, имена, пароль). Только админ.
+ */
+export const updateUser = async (id, data) => {
+  const response = await api.patch(`/users/${id}/`, data);
+  return response.data;
+};
+
+/**
+ * Удалить пользователя. Только админ.
+ */
+export const deleteUser = async (id) => {
+  await api.delete(`/users/${id}/`);
+};
 
 /**
  * Загружает файл на сервер.

@@ -705,3 +705,20 @@ td:hover .clear-btn {
     min-width: 150px;
   }
 }
+
+.tap-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tap-visibility-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.tap-row.tap-hidden {
+  opacity: 0.6;
+}

@@ -15,13 +15,13 @@
       "handoffPath": "handoffs/design-architecture.md",
       "startedAt": "2026-05-08T18:09:38.827Z",
       "finishedAt": "2026-05-08T18:18:46.918Z",
-      "lastUpdate": "2026-05-08T18:18:47.832Z",
+      "lastUpdate": "2026-05-08T18:30:30.565Z",
       "note": "respawned by self-planner (was error; attempts=1)",
       "attempts": 2,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": "type-check-only"
+      "verification": "unit-test-verified"
     },
     {
       "name": "review-architecture",
@@ -83,17 +83,18 @@
       "agentId": null,
       "runId": null,
       "parentAgentId": null,
-      "status": "pending",
+      "status": "running",
       "resultStatus": null,
       "handoffPath": null,
-      "startedAt": null,
+      "startedAt": "2026-05-08T18:30:33.223Z",
       "finishedAt": null,
-      "lastUpdate": null,
+      "lastUpdate": "2026-05-08T18:30:33.223Z",
       "note": null,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": null
+      "verification": null,
+      "attempts": 1
     }
   ],
   "attention": [
@@ -108,6 +109,10 @@
     {
       "at": "2026-05-08T18:18:47.833Z",
       "message": "design-architecture: verification self-reported (type-check-only)"
+    },
+    {
+      "at": "2026-05-08T18:30:30.565Z",
+      "message": "design-architecture: verification recorded (unit-test-verified) by verifier review-architecture"
     }
   ]
 }

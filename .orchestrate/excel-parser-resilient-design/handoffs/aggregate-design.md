@@ -1,11 +1,13 @@
 <!-- orchestrate handoff
 task: aggregate-design
 branch: orch/excel-parser-resilient-design/aggregate-design
-agentId: bc-1eeb3c3f-0663-424f-ba0a-1fd120a8169a
-runId: run-2262cc17-2a5b-4bc9-b531-2f352c3dde5c
+agentId: bc-e4c16fa3-d17a-4af8-a051-35f3e7b6ce18
+runId: run-c1f0b80d-65ac-4873-933d-f4bb68473a67
 resultStatus: finished
-finishedAt: 2026-05-08T18:33:29.537Z
+finishedAt: 2026-05-08T18:42:39.028Z
 -->
+
+All work is committed and pushed; PR #6 updated. `.orchestrate/` left intact. Now the handoff:
 
 ## Status
 success
@@ -14,40 +16,34 @@ success
 `orch/excel-parser-resilient-design/aggregate-design`
 
 ## What I did
-- Прочитал три upstream-артефакта (`architecture.md`, `architecture-review.md`, `parsed_item.schema.json`, `pipeline.py`, `operations.md`) с веток `design-architecture` и `design-operations` через `git show` (на `main` они физически не лежат — это будет интегрировано планнером).
-- Создал ветку `orch/excel-parser-resilient-design/aggregate-design` от `main`.
-- Написал `docs/design/excel-parser/README.md` (290 строк) — единую точку входа в стек документации:
-  1. **TL;DR** — pipeline из 10 stateless-стадий вместо god-class, candidate+voting, реестры, tri-state status, миграция через flag.
-  2. **Состав документации** — таблица из 7 артефактов с порядком чтения и описанием каждого.
-  3. **Ключевые решения** — 12 буллетов с цитатами разделов исходников.
-  4. **Покрытие 14 осей** — таблица `ось | механизм | где описано | риск`, все 14 строк заполнены (13 covered, 1 partial — ось 3, явно помечена как gap).
-  5. **Verdict ревью** — копия `pass-with-comments` + матрица из 17 замечаний (high/med/low) с явным адресом куда уходит каждое (Action items #1–#10, issue, migration plan).
-  6. **Action items** — 10 пронумерованных PR-ов в порядке приоритета: контракт-фикс → закрытие оси 3 → скаффолд + harness → HeaderDetector → ColumnMapper/Normalizer/Validator → реестры + feedback-loop → dispatcher+shadow → observability+админ-UI → A/B+canary → drop legacy.
-  7. **Открытые вопросы** — 7 пунктов для owner'а: калибровка порогов, источник корпуса, канон env-флага (ADR), Φ_req, персистенция кандидата, promote-флоу синонимов, parallelism.
-- Закоммитил, запушил и открыл draft PR [#6](https://github.com/GureganHokex/apps-postavok/pull/6).
+- На ветке `orch/excel-parser-resilient-design/aggregate-design` уже лежал предыдущий аггрегационный `README.md` (290 строк, все 7 разделов, 14 осей, верный verdict). Сохранил его как базу — повторил pattern из `_review/architecture-review.md`, где second-pass верификатор не force-push'ил поверх первой проходки.
+- Поверх добавил коммит `b5d25bf` с интеграцией второго прохода ревью: в таблицу «Реакция планнера на замечания» добавлен столбец `ID ревью`, новые строки для **M-3+OQ-1** (фасад `parse(...) -> list[dict]` теряет `ParseResult.status`), **M-7** (Loader sanitize vs §15 риски — нужен ADR), **M-5** (user-mapping на несуществующую колонку), **M-6** (hot-reload только в DEBUG), **M-2** (TL;DR без `MetaExtractor`), `m-2/m-3/m-8/m-9/m-11`. Цитата verdict теперь содержит оба прохода.
+- В «Открытые вопросы» добавлены три блокера контракта v2 (voting `argmax` vs `sum`/`mean`, контракт фасада при `failed`, scope-коллизия user-mapping) — теперь 10 пунктов, прежние 1–7 смещены на 4–10. Перенумерация согласована с Action items.
+- Обновил draft PR #6 (`docs(excel-parser): aggregate design README — единая точка входа`) свежим описанием с историей коммитов и сводным verdict.
+- Изменений вне `docs/design/excel-parser/README.md` нет; `backend/`, `frontend/`, `.github/`, `scripts/`, `architecture.md`, `operations.md`, `contracts/**`, `_review/**` не трогал; `.orchestrate/` оставлен в покое.
 
 ## Measurements
-- `LOC(docs/design/excel-parser/README.md): 0 → 290`
-- `sections_present: 0 → 7` (TL;DR, Состав документации, Ключевые решения, Покрытие 14 осей, Verdict ревью, Action items, Открытые вопросы)
-- `axes_in_table: required 14 → present 14` (13 covered, 1 partial)
-- `action_items_numbered: required ≤10 → 10`
-- `files_modified_outside_scope: 0 == 0`
+- `LOC(docs/design/excel-parser/README.md): 0 → 341` (новый файл; первый коммит — 290, после интеграции second-pass — 341)
+- `sections (TL;DR/Состав/Решения/14 осей/Verdict/Action items/Открытые вопросы): n/a → 7`
+- `axes covered in table: 14 / 14`
+- `Action items numbered 1..N: 1..10`
+- `Open questions numbered 1..N: 1..10`
+- `commits on branch ahead of main: 0 → 2` (`7766b32`, `b5d25bf`)
 
 ## Verification
 not-verified
 
-Design-only документ; смысловая полнота проверена по acceptance: 7 разделов на месте (`grep "^##"` подтверждает), 14 строк в таблице осей (`awk + grep` подтверждает), 10 action items пронумерованы 1..10, ссылки на upstream-файлы (`architecture.md`, `contracts/`, `_review/`, `operations.md`, `diagrams/`) консистентны с тем, что лежит на upstream-ветках.
+Design-only документ; формальные acceptance проверены через `Grep` (все 7 заголовков `^## ...` присутствуют, 14 строк `^| <digit> |` в таблице осей, нумерация Action items и Open questions последовательна 1..10). Семантическая проверка двух коммитов на ветке: первый коммит — полная аггрегация прежнего worker'а, второй коммит — additive-интеграция second-pass review без удаления контента.
 
 ## Notes, concerns, deviations, findings, thoughts, feedback
-- README ссылается на файлы (`architecture.md`, `_review/architecture-review.md`, `contracts/parsed_item.schema.json`, `contracts/pipeline.py`, `operations.md`, `diagrams/`), которые в моей ветке физически отсутствуют — они приходят с upstream-веток `design-architecture` и `design-operations`. Это сознательное решение: задача явно запрещает мне их трогать (`Do NOT modify`). Когда планнер сольёт ветки в `main` или на интеграционную ветку — все ссылки станут рабочими.
-- Реакция планнера на ревью оформлена как таблица «замечание → принимается? → куда уходит» вместо вольного пересказа: это даёт явный аудит-trail и связку с Action items.
-- В `_review/architecture-review.md` 17 замечаний (high/med/low в сводной таблице §13). 16 учтены в Action items #1 и #2, одно (low: «источник кандидата теряется при персистенции») вынесено в отдельный issue + Открытые вопросы #5, потому что оно меняет shape `field_confidences` и должно быть решено owner'ом до Action item #6.
-- Open questions из handoff'ов upstream-ов (флаг `EXCEL_PARSER_PIPELINE_V2` vs `PARSER_V2_ENABLED`, Φ_req, корпус, promote-флоу) собраны в раздел «Открытые вопросы» — корректно эскалированы, без потерь.
-- Я не создавал и не правил `architecture.md`/`operations.md`/`contracts/`/`_review/`/`diagrams/` — это только агрегационный README.
-- `.orchestrate/` не трогал.
+- **Главная находка:** на ветке `aggregate-design` уже был коммит `7766b32` с готовым README на 290 строк от предшествующего worker'а — все acceptance criteria уже выполнены. Я не force-push'ил поверх, а пошёл по precedent'у `_review/architecture-review.md` (где second-pass верификатор сохранил первого, добавил под отдельным заголовком). Здесь, поскольку README — единый документ и две точки входа невозможны, я просто обогатил существующий файл явными ID из второго прохода ревью и закрыл gap'ы (M-3 + OQ-1 фасад silent-empty, M-7 Loader sanitize, M-5/M-6, voting strategy в OQ).
+- **Содержательно:** прежний README уже включал findings и first-pass и second-pass review без явных ID; моё дополнение — это explicit ID-mapping, что облегчает следующему fix-architecture worker'у грепать ревью по идентификатору.
+- **Обнаруженная inconsistency, которую не правил:** в таблице 14 осей (строка 112 README) для оси 10 в столбце «Механизм» ещё стоит «снять защиту листа на чтение» — это цитата из `architecture.md` §4. Это противоречит §15 (M-7), но я не правил, так как описание оси отражает то, что **сейчас** написано в `architecture.md`, а решение об ADR ушло в Action item #1 и в строку M-7 реакции планнера. После fix-architecture-PR строка автоматически станет согласованной.
+- **Опасения:** Action item #1 в существующем README уже агрегирует high+med+low в один большой PR. Это может вырасти. После моих добавлений (M-3, M-7, M-5, M-2, m-2/m-3/m-8/m-9/m-11) #1 ещё больше — fix-architecture worker может разумно разделить на два sub-PR (контрактный + Loader-ADR), но решение оставляю планнеру.
+- **Соответствие user-rules:** проект на Python (Django), документация на русском — соответствует «один язык проекта», «сначала архитектурная идея, потом код» (документ — design-only без правок кода).
 
 ## Suggested follow-ups
-- Action item #1 (контракт-фикс пакетом) — самый дешёвый и критический: разнобой `field` vs `field_name` зафиксируется в коде на skeleton-стадии, если не закрыть его сейчас.
-- Action item #3 (скаффолд `parsers_v2/` + harness) — стартовать сразу после #1+#2: даёт зелёный baseline для всех последующих стадий.
-- Прежде чем стартовать Action item #7 (`parse_dispatcher` + флаги), нужен ADR в `docs/adr/` фиксирующий канон env-флага — это Открытый вопрос #3, требует решения owner'а.
-- Action item #10 (drop legacy) можно начинать только после того, как 14 осей зелёные на ≥30 файлах приватного корпуса — этот gate явно прописан и в `architecture.md` §12.1, и в `operations.md` §B.2, и в README.
+- Worker `fix-architecture` (must-fix перед skeleton): атакует Action item #1 + #2 в строгой последовательности, отдельный sub-PR на ADR Loader-стратегии (M-7) и ADR контракта фасада (M-3 / OQ-1) — оба ADR живут в `docs/adr/`, не в `docs/design/excel-parser/`.
+- ADR-worker по `EXCEL_PARSER_PIPELINE_V2` vs `PARSER_V2_ENABLED` + `PARSER_LEGACY_FORCE` (Open question #6) — без него `parse_dispatcher.py` (Action item #7) не стартует.
+- Решение по voting strategy `argmax` vs `sum`/`mean` (Open question #1 / M-9 / OQ-3) — нужно от owner'а **до** старта Action item #4 (HeaderDetector калибруется первым на harness'е).
+- Privacy-lead worker: политика приватного корпуса прайсов (Open question #5) — анонимизация ПДн, маскировка цен, Git LFS submodule vs object storage. От этого зависит SLA harness'а и gate перед V5 «drop legacy».

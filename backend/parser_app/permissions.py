@@ -24,12 +24,26 @@ class IsAuthenticatedWithRole(permissions.BasePermission):
 class IsAdmin(permissions.BasePermission):
     """Доступ только для роли admin."""
     def has_permission(self, request, view):
-        return get_user_role(request.user) == UserProfile.ROLE_ADMIN
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        # Поддерживаем оба источника админ-доступа:
+        # бизнес-роль в профиле и стандартные Django-флаги.
+        return (
+            get_user_role(user) == UserProfile.ROLE_ADMIN
+            or bool(user.is_superuser)
+            or bool(user.is_staff)
+        )
 
 
 class IsAdminOrBartender(permissions.BasePermission):
     """Доступ для admin и bartender."""
     def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser or user.is_staff:
+            return True
         role = get_user_role(request.user)
         return role in (UserProfile.ROLE_ADMIN, UserProfile.ROLE_BARTENDER)
 

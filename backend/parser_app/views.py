@@ -14,7 +14,7 @@ from django.http import FileResponse, JsonResponse
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, parser_classes, permission_classes
+from rest_framework.decorators import action, api_view, parser_classes, permission_classes, authentication_classes
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 class FileViewSet(viewsets.ModelViewSet):
     """ViewSet для работы с файлами. Только админ."""
     
+    authentication_classes = [SessionAuthenticationNoCSRF]
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = File.objects.all()
     serializer_class = FileSerializer
@@ -740,6 +741,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 
 @api_view(['POST'])
+@authentication_classes([SessionAuthenticationNoCSRF])
 @permission_classes([IsAuthenticated, IsAdmin])
 @parser_classes([MultiPartParser, FormParser])
 def upload_file(request):

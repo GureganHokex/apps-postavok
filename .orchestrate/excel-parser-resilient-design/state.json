@@ -14,8 +14,8 @@
       "resultStatus": "finished",
       "handoffPath": "handoffs/design-architecture.md",
       "startedAt": "2026-05-08T18:09:38.827Z",
-      "finishedAt": "2026-05-08T18:18:46.918Z",
-      "lastUpdate": "2026-05-08T18:18:47.832Z",
+      "finishedAt": "2026-05-08T18:18:46.972Z",
+      "lastUpdate": "2026-05-08T18:18:49.014Z",
       "note": "respawned by self-planner (was error; attempts=1)",
       "attempts": 2,
       "slackTs": null,
@@ -31,15 +31,15 @@
       "dependsOn": [
         "design-architecture"
       ],
-      "agentId": "bc-7d3757d7-7638-4bc7-8f10-a5db2395659e",
-      "runId": "run-ffd46bfb-84f1-4542-a5ce-7fede63ea33a",
-      "parentAgentId": "bc-155206e2-411c-4b3e-adeb-64b259df9ff0",
+      "agentId": null,
+      "runId": null,
+      "parentAgentId": null,
       "status": "running",
       "resultStatus": null,
       "handoffPath": null,
-      "startedAt": "2026-05-08T18:18:47.836Z",
+      "startedAt": "2026-05-08T18:18:52.229Z",
       "finishedAt": null,
-      "lastUpdate": "2026-05-08T18:18:50.581Z",
+      "lastUpdate": "2026-05-08T18:18:52.229Z",
       "note": null,
       "slackTs": null,
       "prNumber": null,
@@ -58,18 +58,17 @@
       "agentId": null,
       "runId": null,
       "parentAgentId": null,
-      "status": "running",
+      "status": "pending",
       "resultStatus": null,
       "handoffPath": null,
-      "startedAt": "2026-05-08T18:18:50.582Z",
+      "startedAt": null,
       "finishedAt": null,
-      "lastUpdate": "2026-05-08T18:18:50.582Z",
+      "lastUpdate": null,
       "note": null,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": null,
-      "attempts": 1
+      "verification": null
     },
     {
       "name": "aggregate-design",
@@ -106,7 +105,11 @@
       "message": "design-architecture: respawned by self-planner (was error)"
     },
     {
-      "at": "2026-05-08T18:18:47.833Z",
+      "at": "2026-05-08T18:18:47.009Z",
+      "message": "git-sync failed (design-architecture running -> handed-off): Command failed: git -C /workspace/.orchestrate/excel-parser-resilient-design commit -m orch: excel-parser-resilient-design design-architecture running -> handed-off\nfatal: cannot lock ref 'HEAD': is a…"
+    },
+    {
+      "at": "2026-05-08T18:18:49.014Z",
       "message": "design-architecture: verification self-reported (type-check-only)"
     }
   ]

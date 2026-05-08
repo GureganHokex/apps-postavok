@@ -1,278 +1,268 @@
-# Операционный дизайн: evaluation harness и миграция Excel-парсера
+# Операционный дизайн: evaluation harness и миграция Excel-прайс-парсера
 
-Документ дополняет `architecture.md` (pipeline, DTO, confidence, observability): здесь — **как измерять качество**, **как безопасно вытеснить god-class** и **что наблюдать в проде**. Код в `backend/` и `frontend/` не затрагивается; здесь только спецификация.
+Дополняет `architecture.md` и `contracts/` (pipeline, DTO, confidence, observability): здесь описано **как измерять качество парсера**, **как безопасно вытеснить god-class** `backend/parser_app/parsers/excel_parser.py`, и **что наблюдать в проде**. Изменений в коде приложения в этом документе нет.
 
-**Согласование имён:** в архитектурном handoff упомянут флаг `EXCEL_PARSER_PIPELINE_V2`; в операционном плане ниже используется рабочее имя **`PARSER_V2_ENABLED`** (env). При имплементации нужно выбрать одно каноническое имя и прокинуть алиас в конфиг, чтобы документация и деплой не расходились.
+**Флаги feature-toggle:** канонический ключ в прод-контуре **`EXCEL_PARSER_PIPELINE_V2`** (`false` по умолчанию). Рабочее имя **`PARSER_V2_ENABLED`** в оркестрационном ТЗ трактуем как **синоним**: при имплементации в `settings` допускается чтение обоих имён или явный алиас, чтобы деплои и текст задач не расходились.
 
 ---
 
 ## Часть A: Evaluation harness
 
-### A.1. Цель harness
+### A.1 Цель harness
 
-Harness нужен, чтобы на **каждом коммите** (и вручную перед релизом) измерять:
+На **каждом коммите** и перед релизом harness должен измерять:
 
-1. **Качество по полям** — precision / recall / F1 для каждого целевого поля (`brewery`, `beer_name`, `price`, объём, валюта, формат фасовки, остаток и т.д. в терминах `ParsedItem`).
-2. **Drift между версиями парсера** — сравнение отчётов двух сборок на одном и том же корпусе (хеш коммита + версия пайплайна в метаданных отчёта).
-3. **Скорость** — время полного парсинга файла (wall time), опционально p50/p95 по корпусу на эталонной машине CI.
-4. **Стабильность классификации** — доля файлов со статусом `ok` / `partial` / `failed` (согласовано с `ParseResult.status` из архитектуры).
+1. **Качество по полям** — precision / recall / F1 для ключевых полей (`brewery`, `beer_name`, `price`, объём/фасовка, валюта, остаток и др. В терминах `ParsedItem` и адаптера к БД).
+2. **Дрейф версий** — сравнение отчётов двух сборок на одном корпусе (хеш коммита + версия пайплайна в метаданных отчёта).
+3. **Скорость** — wall time полного парсинга файла; при необходимости p50/p95 по корпусу на эталонном runner CI для регрессии против SLO из архитектуры.
+4. **Классификация результата** — доли `ok` / `partial` / `failed`, сопоставление с явным `ParseResult.status`; запрет маскировать регрессию «пустым списком».
 
-Без регрессионного контура любые изменения в эвристиках и реестрах лексикона неуправляемы: harness превращает «ощущение, что стало лучше» в **воспроизводимые метрики** и блокирует мерж при регрессии выше порога.
+**Готовность:** воспроизводимый прогон корпуса → JSON/CSV-артефакты + краткая сводка в stdout; одинаково локально и в CI (workflow подключается отдельной задачей, см. A.5).
 
-### A.2. Корпус
+### A.2 Корпус
 
-**Сбор:** анонимизированные реальные прайсы из переписки и архива поставщиков. Правила:
+1. **Сбор** — **анонимизированные** реальные `.xlsx` из переписки/архива поставщиков: исключить ПДн и чувствительные реквизиты при необходимости маскировать числа цен порядком величин; сохранить структуру объединений, пустых строк, нескольких таблиц на листе; «битый» XML autoFilter — по политике (воссоздавать только если нужно воспроизвести падение Loader’а контролируемо).
 
-- Удалить/заменить ПДн и коммерчески чувствительные реквизиты (ФИО, телефоны, точные договорные цены при политике «не хранить» — заменить на синтетические числа с сохранением порядка величин, если нужно для нормализации).
-- Сохранить **структурные** особенности: объединённые ячейки, пустые строки, «грязные» заголовки, несколько таблиц на листе, скрытые строки (если целевая читалка это видит).
-- Фиксировать **метаданные корпуса** в `corpus.manifest.json`: `supplier_type`, версия табличного редактора (если известна), дата поступления (квартал), хеш файла.
+2. **Категоризация метаданными** для каждого файла (`corpus.manifest.json`): `supplier_kind` (дистрибьютор / пивоварня / смешанный и т.д.), **`complexity`** (`low` / `medium` / `high` по строке заголовка и фрактальной «грязи» таблицы), **`edge`** (список: «цена рядом с остатком», «валюта в заголовке», «производитель в имени», «сломанный autoFilter», др.).
 
-**Категоризация:**
+3. **Хранение** — **приватный** полный корпус в отдельном репо + **Git LFS** или object storage; пути конфиденциальных образцов под `.gitignore` в основном репо или submodule. Публичный минимальный набор: **`tests/fixtures/excel-synthetic/`** (генерация см. A.8; при необходимости префикс `backend/tests/...` согласовать с Django layout). Альтернативный локальный каталог **`tests/fixtures/excel/`** — только записи имён файлов игнорируются в VCS если политика это требует.
 
-| Ось | Примеры меток |
-|-----|----------------|
-| Тип поставщика | дистрибьютор / импортёр / производитель (как в доменной модели) |
-| Сложность | low: фиксированный заголовок в строке 1; medium: заголовок в 2–10; high: многоуровневые шапки, merged cells |
-| Edge-case | «цена рядом с остатком», «brewery только в имени», «сломанный autoFilter XML», «синонимы валют», «transpose-подобная таблица» |
+4. **Версионирование** — тег набора `corpus-vYYYY.MM.idx` + manifest хэш файла, путь эталона, дата поступления, версия пайплайна **baseline v1**.
 
-**Хранение:**
+### A.3 Golden snapshots
 
-- **Приватный** полный корпус: отдельный приватный репозиторий или git submodule + **Git LFS** для `.xlsx`/`.xlsm` (бинарники не в основном репо).
-- В основном репозитории — **`.gitignore`** на пути вроде `tests/fixtures/excel-confidential/*` + README с инструкцией, как клонировать submodule.
-- **Минимальный публичный** набор: `tests/fixtures/excel-synthetic/` — небольшие синтетические файлы, воспроизводимые скриптом (см. A.8), чтобы внешние контрибьюторы и CI без секретов имели smoke-regression.
+1. **Формат:** рядом с `price.xlsx` лежит **`price.xlsx.expected.json`** (sidecar): упорядоченный массив нормализованных `ParsedItem` или обёртка `{ "parse_result": { "status", "warnings", "items": [...] } }` согласно `contracts/parsed_item.schema.json`.
 
-### A.3. Golden snapshots
+2. **Версионирование:** правки эталона только через MR; поля `_golden_schema_version`, `_reviewed_by` / ссылка на тикет.
 
-**Формат:** рядом с входным `price.xlsx` лежит `price.xlsx.expected.json` — массив или объект с полем `items: ParsedItem[]` в семантике контракта из `contracts/parsed_item.schema.json` (допускается обёртка `{ "parse_result": { "status", "items", ... } }` для единообразия с `ParseResult`).
+3. **CLI обновления (проект):** **`python manage.py parser_update_golden <path/to/file.xlsx>`** — записывает **кандидат** `.expected.json.pending`, не перетирает существующий `.expected.json` без `--force`; финальное применение в неинтерактивном режиме только с **`--i-understand-this-changes-contract`** и ревью; в основном CI **запрет** генерации эталона (только read-only сравнение).
 
-**Версионирование:**
+4. **Два режима истины эталона:** (a) вручную валидирован бизнесом; (b) «snapshot v1» для чистого поведенческого регресса Legacy — смешение в один отчёт метрик допускать только по раздельным меткам.
 
-- Golden — **часть ревью**: изменение ожидаемого JSON требует объяснения в PR (баг в эталоне vs намеренное изменение контракта).
-- При изменении схемы `ParsedItem` — миграция golden через одноразовый скрипт + отдельный коммит.
+### A.4 Метрики и формулы
 
-**Обновление (CLI, проектируемое):** `python manage.py parser_update_golden <path-to-xlsx>`:
+**Нормализация** значений выполняется той же функцией домена **`norm(field, value)`**, что используется в production `Normalizer` (фиксируется в коде harness). Множество сравниваемых полей \(\mathcal{F}\) задаётся manifest.
 
-1. Запускает **текущий эталонный** парсер (по умолчанию v1 до стабилизации v2) или явный флаг `--engine v1|v2`.
-2. Пишет/перезаписывает `.expected.json`.
-3. Печатает diff и требует `--i-understand` для неинтерактивного режима.
-4. В CI обновление golden **запрещено** (только чтение и сравнение).
+**Сопоставление строк (matching):** эталонные позиции \(G\), предсказанные \(P\); строим оптимальное (или допустимо жадное при больших N) паросочетание по скорости схожести ключа **пивоварня + название + объём** и допуска по цене; порог ребра \(\tau\) задаёт конфиг harness.
 
-### A.4. Метрики и формулы
+Для каждого поля \(f\) вводим счётчики по сумме по всем парам матчинга \(M\) и «осиротевшим» строкам:
 
-Нижеследующие определения задают **один** способ подсчёта; конкретная реализация должна жить в модуле harness и быть зафиксирована в README harness.
+| Символ | Смысл |
+|--------|--------|
+| \(\mathrm{TP}_f\) | пары из \(M\) с эквивалентным **после нормализации** значением \(f\) |
+| \(\mathrm{FN}_f\) | эталонные строки где требовалось значение \(f\), но нет успешной пары или в паре поле ошибочно |
+| \(\mathrm{FP}_f\) | предсказанные случаи с ненулевым \(f\) без подтверждения матчингом или с явной ошибкой (для «optional» см. исключение в коде правил домена) |
 
-**Предобработка:** нормализация строк и чисел — как в production `Normalizer` (документированная функция `norm_field(φ, value)`).
+**Таблица метрик:**
 
-**Сопоставление строк (alignment):** построить двудольный граф «золотые позиции» \(G\) и «предсказанные» \(P\). Рёбра взвешены по score схожести ключа (например, \(brewery + beer\_name + volume\_ml\)); выбрать matching максимального веса (венгерский алгоритм или жадный для скорости на больших файлах — зафиксировать в коде). Порог \(\tau\) для допустимого ребра — конфиг harness (default подбирается на dev-корпусе).
+| Метрика уровня | Формула |
+|----------------|---------|
+| Precision по полю \(f\) | \(\displaystyle P_f = \frac{\mathrm{TP}_f}{\mathrm{TP}_f + \mathrm{FP}_f}\); при \(\mathrm{TP}_f+\mathrm{FP}_f=0\) → `n/a` |
+| Recall по полю \(f\) | \(\displaystyle R_f = \frac{\mathrm{TP}_f}{\mathrm{TP}_f + \mathrm{FN}_f}\) |
+| F1 по полю \(f\) | \(\displaystyle \mathrm{F1}_f = \frac{2 P_f R_f}{P_f + R_f}\) |
+| **Item-level recall** (позиционная покрыта) | \(\displaystyle R_{\mathrm{item}}^{\mathrm{cov}} = \frac{\bigl|\{ g \in G \mid \exists p \in P : (g,p)\in M \}\bigr|}{|G|}\) |
+| **Item-level recall** (строго по ключевым полям) | \(\displaystyle R_{\mathrm{item}}^{\mathrm{strict}} = \frac{\bigl|\{ g\in G \mid \exists (g,p)\in M,\ \forall f\in\Phi_{\mathrm{req}}\ \text{совпало} \}\bigr|}{|G|}\), где \(\Phi_{\mathrm{req}}\) включает как минимум `beer_name` и `price` плюс доменные |
 
-Обозначения для поля \(\varphi\):
+**Файл и артефакты:** статус **`ok`** если \(R_{\mathrm{item}}^{\mathrm{strict}}=1\) и нет критических отклонений по порогам; **`partial`** при \(R_{\mathrm{item}}^{\mathrm{cov}} \geq \tau_{\mathrm{partial}}\); иначе **`failed`**; дополнительно **`parse_ms_wall`**. Выход harness: **`artifacts/parser-eval/<run_id>/summary.json`**, **`per-field.csv`**, stdout-сводка; при A/B см. парный **`parser-ab-report.md`**.
 
-- \(G_\varphi^+\) — множество золотых позиций, у которых поле \(\varphi\) **не пусто** после нормализации.
-- Для каждой пары \((g,p)\) в matching \(M\): **совпадение поля** \(\mathbb{1}_\varphi(g,p)=1\) если оба значения непусты и \(\text{norm}(g_\varphi)=\text{norm}(p_\varphi)\); если в золоте пусто, поле в знаменателе precision не наказывает ложные «заполнения» отдельной веткой (см. строку «optional fields» в таблице).
+### A.5 Регрессионный harness
 
-**Таблица метрик**
+1. **`pytest`** — `pytest.mark.parametrize("fixture_path", manifest_paths)`; тест золотых пар валидирует список `ParsedItem`/адаптер `List[Dict]` против `.expected.json` в зависимости от режима регрессии.
 
-| Метрика | Уровень | Формула / определение | Интерпретация |
-|--------|---------|------------------------|---------------|
-| Precision по полю \(\varphi\) | поле | \(\displaystyle P_\varphi = \frac{\sum_{(g,p)\in M} \mathbb{1}[\,p_\varphi \neq \emptyset\,] \cdot \mathbb{1}_\varphi(g,p)}{\sum_{(g,p)\in M} \mathbb{1}[\,p_\varphi \neq \emptyset\,] + |P \setminus M_P|\ \text{(логические FP)}}\) — на практике считают TP/FP из матрицы: TP\(_\varphi\) = число matched пар с корректным ненулевым предсказанием; FP\(_\varphi\) = предсказания с ненулевым \(\varphi\), не подтверждённые золотом или неверные; тогда \(P_\varphi = \frac{\text{TP}_\varphi}{\text{TP}_\varphi + \text{FP}_\varphi}\) | Доля корректно заполненных значений среди всех, где модель что-то поставила |
-| Recall по полю \(\varphi\) | поле | \(\displaystyle R_\varphi = \frac{\text{TP}_\varphi}{\text{TP}_\varphi + \text{FN}_\varphi}\), где FN\(_\varphi\) — случаи \(g \in G_\varphi^+\) без пары с верным \(\varphi\) | Полнота извлечения поля относительно эталона |
-| F1 по полю \(\varphi\) | поле | \(\displaystyle F1_\varphi = \frac{2 P_\varphi R_\varphi}{P_\varphi + R_\varphi}\) (0 если знаменатель 0) | Баланс точности и полноты |
-| Item-level recall | строка/позиция | \(\displaystyle R_{\text{item}} = \frac{|\{\,g \in G \;:\; \exists (g,p)\in M,\ \forall \varphi \in \Phi_{\text{req}}\ \mathbb{1}_\varphi(g,p)=1 \,\}|}{|G|}\), где \(\Phi_{\text{req}}\) — обязательные поля (минимум: `beer_name`, `price` + доменно-специфичные) | Доля **полностью** корректных позиций после выравнивания |
-| Item-level «потеряно» | строка | \(\displaystyle L = 1 - R_{\text{cov}}\), \(\displaystyle R_{\text{cov}} = \frac{|\{\,g \in G : \exists (g,p)\in M\,\}|}{|G|}\) | Сколько золотых позиций не получило **никакого** приемлемого матча (потерянные строки) |
-| File status | файл | Категория `ok` (парсинг + валидация без hard errors), `partial` (есть предупреждения / низкий confidence / частичный регион), `failed` | Операционная готовность результата |
-| Время парсинга | файл | \(T_{\text{wall}}\) от старта чтения файла до готового списка `ParsedItem` | Регресс производительности |
+2. **Конфигурация** — секция **`[tool.pytest.ini_options]`** в `pyproject.toml` **или** `pytest.ini`; маркеры `parser_eval`, `slow`, корневая директория тестового пакета (создаётся при внедрении).
 
-**Артефакты:** для каждого прогона — `report.json` (сырые счётчики по каждому файлу и агрегаты) + `summary.csv` (одна строка на коммит) + краткая сводка в stdout.
+3. **Локальный запуск:** `pytest -m parser_eval -q` с **`PARSER_EVAL_CORPUS_ROOT`** указывающим закрытый корпус; без секретов — только синтетика из `excel-synthetic/`.
 
-### A.5. Регрессионный harness
+4. **CI workflow** `.github/workflows/parser-tests.yml` **не создаётся в этом change-set** — только контракт: checkout, optional `git lfs pull` с секретами, установка окружения, `pytest -m parser_eval`; артефакты `summary.json`; на форках без приватных субмодулей — skip или synthetic-only job.
 
-1. **Pytest:** параметризация `pytest.mark.parametrize("fixture_path", corpus_paths)`; тест `test_golden_matches_expected(fixture_path)` загружает twin `.expected.json` и сравнивает с результатом `ExcelParser.parse(...)`, либо с адаптером `ParseResult → list[dict]` для обратной совместимости с текущим публичным API.
-2. **Конфигурация:** секция `[tool.pytest.ini_options]` в `pyproject.toml` **или** `pytest.ini` с маркерами `parser`, `golden`, `slow` (проектируемо; фактическое добавление — отдельная задача/PR).
-3. **Локальный запуск:** `pytest -m parser tests/parser_harness/` (каталог задаётся при внедрении).
-4. **CI:** workflow `.github/workflows/parser-tests.yml` **не создаётся в этом PR**; в дизайне фиксируем: триггер `pull_request` на пути `backend/parser_app/**`, `tests/fixtures/excel-synthetic/**`, `docs/design/excel-parser/**` (опционально); job на `ubuntu-latest`; шаг `pytest -m "parser and not slow"`; артефакты — `report.json`.
+### A.6 A/B сравнение с v1
 
-### A.6. A/B compare с v1
+1. Прогоны **Legacy** через публичный `ExcelParser.parse(supplier_type, brewery_name, supplier_column_mapping)` и **candidate** (`parsers_v2` / DDD `Pipeline`) при идентичных входных mapping из manifest.
+2. Нормализация обоих логов diff к общему слою **`ParsedItem[]`** перед сравнением.
+3. **Отчёт** `artifacts/parser-eval/parser-ab-report.md`: \(\Delta \mathrm{F1}_{price}\), \(\Delta R_{\mathrm{item}}\), delta предупреждений, переходы `status`.
 
-Для каждого файла корпуса:
+4. Классификация изменений:
 
-1. Прогон **v1** (`backend/parser_app/parsers/excel_parser.py` через существующий `ExcelParser.parse(...)`) и **v2** (будущий pipeline).
-2. Нормализация обоих выходов к **`ParsedItem[]`** (одинаковый adapter).
-3. Подсчёт diff: расхождения по полям, лишние/пропущенные строки, дельта confidence.
+| Тип | Сигнал |
+|-----|--------|
+| Улучшение | рост \(R_{\mathrm{item}}\) / ключевых \(\mathrm{F1}_f\); `failed→ok` без резкого роста ложных цен из допуска |
+| Регресс | падение ценового поля или строго item-recall; вспышка ambiguous при прежнем `ok` в v1; систематический сдвиг `brewery` |
 
-**Артефакт:** `parser-ab-report.md` с таблицей файлов и итоговыми метриками A.4.
+### A.7 Fuzz и мутации
 
-**Интерпретация отличий:**
+Стресс на **confidence + voting**:
 
-- **Улучшение:** выросли \(R_{\text{item}}\) / \(F1_\varphi\) для ключевых полей; снизилось \(L\); файл перешёл `failed → ok/partial` без роста ложных цен.
-- **Регресс:** падение \(F1_{price}\) или \(R_{\text{item}}\); появление систематических FP в остатках; рост \(T_{\text{wall}}\) сверх бюджета из SLO архитектуры.
+1. сдвиг шапки в окне строк \(0\dots N-1\);
+2. перестановка / дубликаты колонок в теле данных;
+3. удаление случайной доли строк (или отдельный режим только «без падения исключением» если golden не синхронизируется генератором);
+4. синонимы заголовков по реестрам + «шумовые» варианты.
 
-### A.7. Fuzz и мутации
+Ожидание: корректные **статусы**, отсутствие silent-empty, понятный набор предупреждений.
 
-Синтетические трансформации **без участия человека** (на базе канонического «чистого» xlsx):
+### A.8 Фикстуры с edge-cases (≥10 синтетических xlsx)
 
-- сдвиг шапки на \(k \in \{0,\dots,9\}\) строк;
-- перестановка и дублирование колонок;
-- удаление случайных доли строк \(p \in \{0.05, 0.15\}\);
-- подмена заголовков синонимами из реестра и «шумовыми» вариантами;
-- разрыв merged cells / вставка пустых столбцов.
-
-**Цель:** стресс-тест **confidence + voting** (не ожидается идеальный parse; ожидается **корректный статус**, отсутствие silent empty, диагностируемые warnings).
-
-### A.8. Фикстуры с edge-cases (≥10 синтетических xlsx)
-
-Все ниже можно генерировать скриптом `scripts/make_excel_fixtures.py` (**создание скрипта — отдельная задача**; здесь только перечень).
+Генерируются скриптом **`scripts/make_excel_fixtures.py`** (**реализация — отдельная задача**).
 
 | № | Имя (рекомендуемое) | Что проверяет |
 |---|---------------------|---------------|
-| 1 | `hdr_row_06.xlsx` | Заголовок на 7-й строке (индекс 6), данные ниже |
-| 2 | `brewery_inline_name.xlsx` | Пивоварня только внутри `beer_name`, отдельной колонки нет |
-| 3 | `brewery_own_column.xlsx` | Отдельная колонка `brewery` + `product` |
-| 4 | `currency_RUB_vs_rub_synonyms.xlsx` | Разные подписи валюты в шапке |
-| 5 | `volume_ml_cl_mixed.xlsx` | смешение мл / cl / л в одном листе |
-| 6 | `price_near_stock_cols.xlsx` | Две визуально похожие колонки «цена» и «остаток» |
-| 7 | `multi_table_sheet.xlsx` | Две таблицы подряд с разными шапками |
-| 8 | `empty_rows_noise.xlsx` | Пустые строки между блоками данных |
-| 9 | `merged_header_cells.xlsx` | Объединённые ячейки в шапке |
-| 10 | `pseudo_transpose.xlsx` | Заголовки в столбце A, данные в строках |
-| 11 | `autofilter_corrupt_placeholder.xlsx` | Файл с обрезанным/невалидным XML фильтра (ловим падение Loader и ожидаем graceful downgrade) |
-| 12 | `duplicate_sku_rows.xlsx` | Дубликаты ключей для `Deduplicator` |
+| 1 | `header_row_07.xlsx` / `hdr_row_06.xlsx` | Заголовок на строке \(\ge 7\), текст выше блока данных |
+| 2 | `brewery_inline_name.xlsx` | Производитель только в названии напитка |
+| 3 | `brewery_own_column.xlsx` | Отдельная колонка `brewery`; канонический `beer_name` без дубля |
+| 4 | `currency_RUB_vs_rub_synonyms.xlsx` | Валютные синонимы в шапке / групповой строке |
+| 5 | `volume_ml_cl_mixed.xlsx` | смешение мл/cl/л включая русскую запятую («0,33 л») |
+| 6 | `price_near_stock_cols.xlsx` | Соседство «розница» и «остаток» со схожими заголовками |
+| 7 | `multi_table_sheet.xlsx` | Две таблицы одной страницы разной шапки |
+| 8 | `empty_rows_inside_block.xlsx` | Шум-пустые строки в середине блока |
+| 9 | `merged_header_cells.xlsx` | Объединённые заголовки + подшапки |
+| 10 | `pseudo_transpose.xlsx` | Заголовки в столбце A («транспонированное» восприятие) |
+| 11 | `autofilter_corrupt_placeholder.xlsx` | Порча filter XML; Graceful degraded Loader без kill процесса |
+| 12 | `ambiguous_duplicate_nds_columns.xlsx` | «Цена без НДС» vs «Цена с НДС» как ловушка column-mapper |
+| 13 | `duplicate_sku_rows.xlsx` | Дубликаты ключей как нагрузка на `Deduplicator` |
 
 ---
 
-## Часть B: Migration plan (strangler fig)
+## Часть B: Migration plan (strangler)
 
-### B.1. Стратегия
+### B.1 Стратегия
 
-Комбинация **strangler fig** и **feature flag**:
+**Strangler fig** + **feature flag** (**`EXCEL_PARSER_PIPELINE_V2`**, синоним **`PARSER_V2_ENABLED`** при чтении настроек). Наружу до Phase 5 стабильно держится `ExcelParser.parse(...) -> List[Dict]`.
 
-- Новый код монтируется рядом с legacy, интерфейс наружу (`ExcelParser.parse(...)`) сохраняется.
-- По флагу и постепенному **canary по поставщикам** переключается реализация.
-- Полное удаление legacy — только после ок метрик harness и прода.
+### B.2 Фазы и exit criteria
 
-### B.2. Фазы и exit criteria
+| № | Фаза | Что происходит | Exit criteria перед следующей фазой |
+|---|------|----------------|-------------------------------------|
+| 0 | **Harness + corpus** | Есть синтетика в репо, приватный корпус согласован, baseline метрик Legacy зафиксирован (`baseline-v1.json`) | synthetic harness зелёный; утверждённые правила добавления эталона; параметр \(\tau\) matching задокументирован |
+| 1 | **v2 за флагом** (`EXCEL_PARSER_PIPELINE_V2=false` по умолчанию) | Код пайплайна в `backend/parser_app/parsers_v2/` (**или эволюция DDD-слоя**, см. B.5), публичный `ExcelParser` **диспатчит** | Без включённого флага поведение **битово совпадает** с историческими smoke/snapshot точками; с флагом в dev исключений нет на synthetic-корпусе |
+| 2 | **Shadow** | Ответ клиентов — v1; v2 считается **параллельно** (async / sampling / worker), результат только в телеметрии | \(\ge 95\%\) пар без необъяснимых расхождений цен в допуске; ошибки исключений v2 < **0{,}5 % попыток**; CPU-бюджет shadow не пробит неделю наблюдений |
+| 3 | **Canary** по `Supplier.id` (1–2 пилота) | Ответ может идти из v2 только у allow-listed | По пилотам \(R_{\mathrm{item}}^{\mathrm{strict}}\) не хуже baseline v1 более чем на \(\delta\) (типично \(\delta=0{,}01\)); жалобы ниже SLA; успешный **drill отката** |
+| 4 | **Full v2**, emergency Legacy | все поставщики на v2; Legacy остаётся по emergency-переключателю (напр. **`PARSER_LEGACY_FORCE=true`** only ops) | 14 календарных дней зелёных алёртов (часть C); harness по полному корпусу без новых регрессий относительно Phase 2–3 |
+| 5 | **Удаление v1-кода** | чистка `parsers/excel_parser.py`, перенос лексики из `supplier_profiles.py` в реестры | мёртвый код удалён; покрытие harness ≥ порога продукта; обновлены runbook’и |
 
-| Phase | Содержание | Exit criteria (готово переходить дальше) |
-|-------|-------------|------------------------------------------|
-| **0** — corpus + baseline | Приватный корпус описан и доступен команде; synthetic в репо; первый golden набор для top-поставщиков; замерены baseline-метрики v1 (`report.json` архивируется как эталон) | Harness зелёный на synthetic; baseline v1 сохранён с хешем коммита; есть согласованный `\tau` для matching |
-| **1** — v2 под флагом | Новый pipeline в каталоге `parser_app/parsers_v2/` (или аналог), env **`PARSER_V2_ENABLED`** (default off); публичный `ExcelParser` **диспатчит** реализацию | Все существующие интеграционные точки без флага ведут себя как сейчас; с флагом на dev — хотя бы `partial` на части корпуса без необработанных исключений |
-| **2** — shadow run | В проде v1 остаётся источником истины; v2 вызывается асинхронно/в фоне, сравнение в структурированных логах (без влияния на ответ пользователю) | За 7 дней: `parser_shadow_mismatch_rate` в пределах порога; нет деградации p95 > SLO из-за shadow; нет memory leak |
-| **3** — canary | Для 1–2 `Supplier.id` ответ формируется v2 | Item-level recall и F1 ключевых полей **не хуже** baseline v1 на этих поставщиках; операторы не сообщают о росте инцидентов; откат одной командой выполнялся на drill |
-| **4** — 100% v2 | Все поставщики на v2; v1 остаётся за флагом «emergency rollback» | Метрики прода стабильны 14 дней; harness на полном корпусе без новых регрессий относительно Phase 2–3 |
-| **5** — удаление legacy | Удаление god-class ветки, чистка `parsers/excel_parser.py` и перенос остаточных эвристик в реестры/модули | Размер и сложность кода снижены; нет dead code; документация и runbook обновлены |
+(Фаз шесть — требование «не меньше пяти» выполняется.)
 
-Итого **6 фаз (0–5)**, каждая с явными критериями выхода.
+### B.3 Точки переключения (`parse_dispatcher`)
 
-### B.3. Точки переключения (диспетчер)
-
-Рекомендуемый модуль (новый при имплементации): `parser_app/services/parse_dispatcher.py`.
-
-**Псевдокод:**
+Расположение: **`backend/parser_app/services/parse_dispatcher.py`** (новый модуль задачей).
 
 ```python
-def parse_excel_price_list(file, supplier_type, brewery_name, supplier_column_mapping, supplier_id):
-    settings = get_django_settings()
-    v2_flag = settings.PARSER_V2_ENABLED
-    canary_ids = settings.PARSER_V2_CANARY_SUPPLIER_IDS
+# parse_dispatcher.py — псевдокод, не производственный код
 
-    if v2_flag and (not canary_ids or supplier_id in canary_ids):
-        return parsers_v2.parse(file, supplier_type, brewery_name, supplier_column_mapping)
-    return legacy_excel_parser.parse(file, supplier_type, brewery_name, supplier_column_mapping)
+def parse_excel_dispatcher(file, supplier_type, brewery_name, supplier_column_mapping, supplier_id=None):
+    cfg = settings.PARSER_PIPELINE
+
+    def legacy():
+        return legacy_excel_parser.parse(supplier_type, brewery_name, supplier_column_mapping)
+
+    if getattr(cfg, "shadow_mode", False):
+        ans = legacy()
+        enqueue_async_compare(ans, supplier_id, lambda: pipeline_v2.run(...))
+        return ans
+
+    v2_allowed = getattr(cfg, "use_v2", False) or os.getenv("EXCEL_PARSER_PIPELINE_V2") == "true"
+    supplier_ok = supplier_id_allowed(getattr(cfg, "supplier_allowlist_v2", set()), supplier_id)
+
+    if v2_allowed and (not getattr(cfg, "supplier_allowlist_v2", None) or supplier_ok):
+        return adapt_pipeline_to_legacy_dicts(pipeline_v2.run(...))
+
+    return legacy()
+
 ```
 
-Фактические импорты и сигнатуры должны совпасть с существующим `ExcelParser.parse(supplier_type, brewery_name, supplier_column_mapping)`.
+Обёртка `ExcelParser.parse` делегирует сюда, сохраняя **сигнатуру**.
 
-### B.4. Откат
+### B.4 Откат
 
-- **Немедленно:** `PARSER_V2_ENABLED=false` (и/или очистка canary-списка), перезапуск воркеров/процесса.
-- Повторная обработка затронутых файлов — **тем же API v1**, без миграций схемы БД (согласовано с архитектурой: расширения — отдельными таблицами `ParseRun` и т.д., не ломающими core).
+1. Выключить канонический флаг и/или очистить canary IDs; при необходимости **`PARSER_LEGACY_FORCE=true`** переводит весь парсинг на Legacy независимо от промежуточных флагов (операционный последний контур безопасности — проектируется совместно с on-call).
 
-### B.5. Соотношение с DDD-рефакторингом (`infrastructure/parsers/`)
+2. **Перезапуск** процессов/воркеров после смены env.
 
-**Рекомендация:** **довести существующий DDD-разрез (`infrastructure/parsers/excel_parser.py`, `domain/services/`, `application/use_cases/`) до v2**, а не плодить третью параллельную реализацию.
+3. **Схема БД** основной цены/номенклатуры **не** меняется откатом; таблицы `ParseRun` / feedback живут параллельно и могут временно быть пустыми.
 
-**Обоснование:**
+### B.5 Соотношение с уже начатым DDD-слоем (`infrastructure/parsers/excel_parser.py`)
 
-- Уже вложена декомпозиция по слоям; дублирование третьей ветки удлинит Phase 5 и размоет ownership.
-- Strangler должен **подключаться на границе application/service**, переключая use-case, а не копируя эвристики.
-- Риск «двух истин» снижается, если v2 — эволюция `infrastructure` + тонкие адаптеры к `ParsedItem`.
+**Решение: довести существующий DDD-слой** (`infrastructure/parsers/excel_parser.py`, `domain/services/`, `application/use_cases/`) до реализации **Pipeline v2**, а не плодить третью ветку.
 
-Если текущий монолит в `infrastructure` всё ещё несёт 3800+ строк в одном файле, отдельная подзадача — **физический сплит файла по стадиям pipeline** без изменения поведения (тесты harness).
+**Обоснование:** уже разделённые слои, повторное копирование четырёх fallback Loader-стратегий неэкономно; точка strangler должна висеть над **application use-case**, а не порождать дубль эвристик. Отдельная подфаза — **физический split** большого файла infrastructure на модули стадий **без** изменения поведения под harness.
 
-### B.6. Чек-лист по ролям (каждый шаг)
+Если противоречие с конфиденцами стадий обнаружено — только тогда параллельный прототип + ADR отменяет решение выше.
 
-| Действие | Backend | Ops / SRE | Админ продукта |
-|----------|---------|-----------|----------------|
-| Добавить флаги в settings / secrets | правит конфиг, код чтения env | катит в stage/prod | — |
-| Включить shadow | вливает код, мониторит логи | следит за нагрузкой, алёрты | информирует поставщиков при инцидентах |
-| Canary по supplier | добавляет id в список | контролирует rollout | выбирает пилотных поставщиков |
-| Откат | переключает флаг | рестарт / scale | ставит задачи на переимпорт |
-| Обновление golden | правит эталоны, harness | — | валидирует бизнес-смысл цен |
+### B.6 Чек-лист по ролям
 
-**Метрики, ок'ающие переход:** см. Phase table; технически обязательны: \(F1_{price}\), \(R_{\text{item}}\), доля `failed`, p95 времени парсинга, средний confidence маппинга колонок.
+| Шаг | Backend | Ops / SRE | Администратор / данные |
+|-----|---------|-----------|-------------------------|
+| Подключить telemetry shadow | код + флаги | CPU/лаг мониторинг | информирование |
+| Canary allow-list | PR + хранилище allow-list id | наблюдает алёрты | выбор поставщика |
+| Full rollout merge | выпиливает временный техдолг | дашборд зелёный N дней | гайды на ручной mapping |
+| Post cleanup | удаляет Legacy | экономия железа | обновляет инструкции |
 
-### B.7. Риски и mitigation
+«Ок переход»: метрики из таблицы B.2 столбец exit criteria + триггеры части C.
 
-| Риск | Mitigation |
-|------|------------|
-| **Производительность shadow-run** | Выполнять v2 в пуле с лимитом concurrency, sampling (не каждый файл), async с таймаутом; circuit breaker при росте CPU |
-| **Рассинхрон формата `parsed_item`/dict** | Единый adapter в dispatcher; JSON Schema проверка на границе; A/B отчёт в Phase 2 |
-| **БД-миграции для feedback-store** | Выполнять **до** canary на широкой аудитории; feature «записывать feedback» отдельным флагом; обратная совместимость read-path |
-| **Недостаток golden на редких поставщиках** | Приоритетный сбор корпуса; UI ambiguous mapping для донаполнения `SupplierColumnMapping` |
+### B.7 Риски миграции и mitigation
+
+| Риск | Проявление | Mitigation |
+|------|------------|------------|
+| Производительность двойных прогонов | деградация p95/CPU при shadow | async, sampling доли файлов, лимиты concurrency, circuit breaker shadow |
+| Расхождение `dict` между v1 и v2 | «тихие» ошибки сохранения | единый `adapt_pipeline_to_legacy_dicts`, schema-check на границе, A/B diff |
+| Параллельные БД-миграции feedback | смешение с rollout | включать записи ParseRun/ParsingFeedback **отдельным** mini-flag; мигрировать до wide canary если нужно |
+| Переподгонка только под golden | утрата генерализации | регулярная замена образцов, fuzz блоки части A.7 |
 
 ---
 
-## Часть C: Observability и alerting
+## Часть C: Observability + alerting
 
-### C.1. Метрики и логи в проде
+### C.1 Метрики и структурированные логи проде
 
-Опираемся на структурированные события из архитектуры (§ telemetry / Prometheus); минимальный набор:
+События (JSON + `trace_id`):
 
-- `parse_started` / `parse_finished` — `supplier_id`, `file_hash`, `engine_version`, `duration_ms`, `status`.
-- `column_mapping_decision` — кандидаты, веса источников, итоговый `ColumnPlan`, средний score.
-- `header_detector_result` — выбранная строка шапки, альтернативы.
-- `validation_warning` / `parse_error` — код причины, stage.
+1. **`parse_started` / `parse_finished`** — `supplier_id`, `file_sha256`, длительность, `pipeline_version`, `loader_strategy`.
 
-Метрики Prometheus (имена иллюстративные, унифицировать при имплементации):
+2. **`header_detected` / `region_detected`** — краткие структуры кандидатов и финального выбора.
 
-- `parser_runs_total{status,outcome}`
-- `parser_duration_seconds` (histogram)
-- `parser_field_f1` (gauge, если считается async на выборке; иначе offline)
-- `column_mapping_confidence_avg` (gauge по парсингам за окно)
+3. **`column_mapping_decided`** — ранжированные `Candidate[T]` до и после tie-break из архитектурных весов.
 
-### C.2. Алёрты (≥3 с порогами)
+4. **`parse_status`** итогового `ParseResult` + счётчик предупреждений по кодам стадии.
 
-| Алёрт | Условие | Действие |
-|-------|---------|----------|
-| Высокая доля ошибок парсинга | **`parser_failure_rate > 5%`** за последний **1 ч** (отношение failed к total runs) | Page on-call; автоматический откат canary через снятие supplier id или флага (runbook) |
-| Деградация латентности | **`parser_p95 > 5 s`** по окну 1 ч на проде | Investigate Loader/IO; уменьшить concurrency; временно исключить тяжёлые файлы из batch |
-| Низкая уверенность маппинга | **`column_mapping_confidence_avg < 0.6`** за 24 ч скользящее | Уведомить команду данных; включить режим более консервативных порогов; проверить дрифт лексикона |
-| Shadow mismatch spike (Phase 2) | `parser_shadow_mismatch_rate > 2%` за 24 ч | Блокировать Phase 3; triage через A/B отчёт |
+Prometheus минимально: счётчик **`parser_runs_total{status}`**, histogram **`parser_parse_seconds`** (или `*_bucket`), gauge **`parser_column_mapping_confidence_avg`**, счётчик провалов стадии **`parser_stage_failures_total{stage}`**.
 
-*(Первые три удовлетворяют явному требованию порогов из ТЗ; четвёртый — для безопасного rollout.)*
+### C.2 Алёрты (≥3 с явными порогами)
 
-### C.3. Дашборд (эскиз)
+| ID | Алёрт | Условие | Действие |
+|----|-------|---------|---------|
+| A1 | **parser_failure_rate** | доля статусов `failed` среди попыток **> 5 % за 1 ч скользящего окна** (`parser_failure_rate > 0.05 / 1h`) | paging on-call парсинговой роли + freeze canary |
+| A2 | **parser_p95** | **`parser_p95 > 5 s`** на окне **1 ч** | throttle shadow / временное снижение concurrency; escalation если повтор через 24 ч |
+| A3 | **column_mapping_confidence_avg** | **`column_mapping_confidence_avg < 0,6`** на окне **24 ч** rolling | уведомление команды доменных данных; усилить консервативный режим ambiguity |
+| A4 *(опционально rollout)* | Shadow mismatch spike | **`parser_shadow_mismatch_rate > 2 %`** за **`24 ч`** | блок Phase 3, triage A/B отчёта |
 
-Панели (Grafana или аналог):
+### C.3 Дашборд (эскиз)
 
-1. **Статус парсингов:** stacked bar — `ok` / `partial` / `failed` по времени.
-2. **Latency:** p50/p95/p99 от histogram `parser_duration_seconds`.
-3. **Качество:** rolling F1 для `price` и `beer_name` (агрегация из offline harness **или** sample-based scorer).
-4. **Mapping confidence:** временной ряд среднего score + топ причин низкой уверенности.
-5. **Supplier heatmap:** ошибки по `supplier_id` (where problems cluster).
+1. Стек времени `ok` / `partial` / `failed` + отдельный ряд только canary-поставщиков.
+2. p50/p95/p99 **`parser_parse_seconds`**.
+3. Heatmap ошибок по стадии `Loader→…→Validator`.
+4. Топ ошибок по `supplier_id`.
+5. Распределение уверенностей столбца (гистограмма + rolling mean).
 
-### C.4. UI при ambiguous результате
+### C.4 Административный UI при ambiguous результате
 
-Когда финальный score маппинга колонки **ниже порога** \(\theta_{field}\) (см. архитектуру):
+1. Если итоговый score поля ниже \(\theta_{\mathrm{field}}\) (из конфигурации архитектуры), показываем блок «колоночный выбор» с ранжированными кандидатами (+ подписи вкладов источников).
 
-1. Показать таблицу **ранжированных кандидатов**: индекс колонки Excel, текст заголовка(ов), вклад каждого источника голосования, итоговый score.
-2. Кнопка **«Подтвердить mapping и запомнить»** — сохраняет запись в `SupplierColumnMapping` с областью действия (`exact_file` / `supplier` / `global`) и пользователем.
-3. Опционально: превью первых \(N\) строк данных для человеческого контроля.
-4. Телеметрия: событие `mapping_user_override` для калибровки весов в harness.
+2. Сэмплы первых **`N`** непустых ячеек кандидатной колонки рядом.
+
+3. Кнопка **«Подтвердить mapping и запомнить»** пишет `SupplierColumnMapping` с `scope` в **{ `exact_file` (SHA-256), `supplier`, `global` }** и применяется при следующих запусках с весом «user».
+
+4. Аудит: автор, временная метка, TTL override, revoke.
 
 ---
 
-## Handoff для оркестратора (кратко)
+## Связность с кодовой базой
 
-- Harness = приватный корпус + synthetic + golden JSON + pytest-параметризация + отчёты JSON/CSV; A/B и fuzz как надстройки.
-- Миграция: strangler + `PARSER_V2_ENABLED`, shadow → canary → full; v2 строить на существующем DDD-слое `infrastructure/`, не на третьей ветке.
-- Observability: три обязательных алёрта по failure rate, p95 и confidence; UI для подтверждения mapping замыкает feedback-loop.
+Публичный API на переходном этапе: **`ExcelParser(BaseParser).parse(...) -> List[Dict]`**.
+
+Авторегрессионных `test_*.py` специализированных под текущие парсеры **ещё нет** — первичный противовес задаёт harness этого документа.
+
+---
+
+## Открытые вопросы
+
+1. Окончательно зафиксировать один env-ключ документации (`EXCEL_PARSER_PIPELINE_V2` против `PARSER_V2_ENABLED`) в ADR конфиг-слоя Django.
+
+2. Уточнить \(\Phi_{\mathrm{req}}\) и допуск fuzzy-сопоставления для полей после нормализации (крепость, упаковка).

@@ -1,10 +1,10 @@
 <!-- orchestrate handoff
 task: design-operations
 branch: orch/excel-parser-resilient-design/design-operations
-agentId: bc-cdf402e6-dd69-4e38-b6cf-eaf19409d36d
-runId: run-4a23e9e5-d050-4146-a079-0d43d0162520
+agentId: bc-254ccd2d-7368-49d9-b71e-a4cd53cff944
+runId: run-afd0770c-012b-4c36-8d65-1644aee763be
 resultStatus: finished
-finishedAt: 2026-05-08T18:20:39.844Z
+finishedAt: 2026-05-08T18:22:24.848Z
 -->
 
 ## Status
@@ -14,26 +14,26 @@ success
 orch/excel-parser-resilient-design/design-operations
 
 ## What I did
-- Добавил `docs/design/excel-parser/operations.md`: **часть A** (цели harness, корпус и хранение, golden JSON + CLI-спека обновления, таблица метрик с формулами precision/recall/F1 и item-level recall, дизайн pytest/CI, A/B с v1, fuzz, 12 синтетических edge-case xlsx), **часть B** (strangler + `PARSER_V2_ENABLED`, фазы 0–5 с exit criteria, псевдокод `parse_dispatcher.py`, откат, решение в пользу доведения существующего DDD в `infrastructure/` до v2, чек-лист ролей, риски), **часть C** (прод-логи/метрики, ≥3 алёрта с порогами из ТЗ + доп. shadow-mismatch, эскиз дашборда, UI для ambiguous mapping).
-- Закоммитил и запушил ветку; открыл **draft PR #5** в `main`.
+- Собрал после rebase единственный файл `docs/design/excel-parser/operations.md`: три части (A harness, B strangler из 6 фаз с exit criteria, C telemetry/дашборд/admin UI), канонический флаг `EXCEL_PARSER_PIPELINE_V2` с синонимом `PARSER_V2_ENABLED`, таблица метрик с формулами precision/recall/F1 по полю и двум вариантам item-level recall, путь к эталону `manage.py parser_update_golden`, A/B отчёт `parser-ab-report.md`, ≥10 синтетических сценариев (до 13 в таблице), псевдокод `parser_app/services/parse_dispatcher.py` с shadow-режимом, обоснованное решение развивать существующий DDD-слой без третьей реализации, ≥3 прод-алёрта с порогами.
+- Отправил изменения на `origin` и обновил draft PR [№5](https://github.com/GureganHokex/apps-postavok/pull/5) к `main`.
 
 ## Measurements
-- `LOC(docs/design/excel-parser/operations.md)`: 0 → 278
-- `migration_phases_with_exit_criteria`: 0 → 6 (фазы 0–5)
-- `alerts_with_explicit_thresholds`: 0 → 4 (три обязательных из ТЗ + один для shadow)
-- `synthetic_edge_case_fixtures_specified`: 0 → 12
-- `PR(draft)`: none → #5
+- `sections (частей A+B+C): n/a → 3`
+- `LOC(docs/design/excel-parser/operations.md): 268`
+- фаз миграции с exit criteria: `5 → >=5` (**6** явных строк в таблице B.2)
+- алёртов с числовым порогом в C.2: `>=3 → 4` (три обязательных по ТЗ + один опционально для shadow)
+- `pytest parser harness в репо: 0 файлов изменений → 0` (**дизайн-only** по acceptance)
 
 ## Verification
-type-check-only (документ сверялся с acceptance-чеклистом ТЗ; исполняемый код и CI не менялись)
+not-verified
+
+Design-only документ без исполнимых тестов в этом PR; смысловая полнота — по чек-листу acceptance в задаче.
 
 ## Notes, concerns, deviations, findings, thoughts, feedback
-- В тексте зафиксировано расхождение имён флага между handoff архитектуры (`EXCEL_PARSER_PIPELINE_V2`) и этим ТЗ (`PARSER_V2_ENABLED`); рекомендован один канон + алиас в settings.
-- Workflow `.github/workflows/parser-tests.yml` и скрипт `scripts/make_excel_fixtures.py` **намеренно не добавлялись** (вне области PR), только описаны как последующая имплементация.
-- Точное значение порога \(\tau\) для матчинга строк в harness оставлено параметром конфигурации с калибровкой по корпусу — как и веса voting из архитектуры.
+- На удалённой ветке уже был набросок `operations.md`; при `git pull --rebase` был **add/add conflict** — итог **слита** версия из этой задачи с учётом деталей предшественника и требований acceptance (две формулы item-recall для ясности: покрывающее и строгое по \(\Phi_{\mathrm{req}}\)).
+- Верхний handoff архитектуры упомянул путь **`infrastructure/parsers/`** без префикса `parser_app`; в документе уточнён фактический путь репозитория `backend/parser_app/infrastructure/...`.
 
 ## Suggested follow-ups
-- Отдельный PR: минимальный pytest-harness + `tests/fixtures/excel-synthetic/` + первые golden под synthetic.
-- Отдельный PR: `.github/workflows/parser-tests.yml` по спецификации из документа.
-- Отдельный PR: скрипт генерации синтетических xlsx из таблицы A.8 и `manage.py parser_update_golden`.
-- Принять единое имя feature-flag в коде/settings и синхронизировать `architecture.md` при необходимости.
+- Отдельный worker: реализация `tests/fixtures/excel-synthetic/`, скрипт `scripts/make_excel_fixtures.py`, `pytest` маркеры и реальный `.github/workflows/parser-tests.yml`.
+- Реализовать `parser_update_golden`, `dispatch_parse`/флаги в settings и сбор Prometheus-метрик по событиям из §11 `architecture.md`.
+- ADR: зафиксировать **единое** имя env-переменной и семантику `PARSER_LEGACY_FORCE` относительно `EXCEL_PARSER_PIPELINE_V2`.

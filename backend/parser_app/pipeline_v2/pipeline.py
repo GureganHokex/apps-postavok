@@ -46,6 +46,10 @@ class ExcelPipelineV2:
                     "pipeline_version": "v2-bridge",
                     "sheet_count": len(workbook.get("sheet_names", [])),
                     "header_rows": workbook.get("header_rows", {}),
+                    "header_diagnostics": workbook.get("header_diagnostics", {}),
+                    "column_mappings": workbook.get("column_mappings", {}),
+                    "column_mapping_candidates": workbook.get("column_mapping_candidates", {}),
+                    "column_mapping_confidence": workbook.get("column_mapping_confidence", {}),
                 },
             )
         except Exception as exc:

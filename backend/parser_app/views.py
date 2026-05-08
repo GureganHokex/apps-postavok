@@ -48,6 +48,8 @@ from .permissions import (
 from .auth_views import SessionAuthenticationNoCSRF
 from .services.parse_dispatcher import dispatch_parse
 from .services.parse_run_service import persist_parse_run
+from .services.autopilot_repair import autopilot_repair_raw_items
+from .services.autopilot_learning import promote_feedback_to_mapping
 from .pipeline_v2 import ParseStatus
 
 logger = logging.getLogger(__name__)
@@ -169,7 +171,12 @@ class FileViewSet(viewsets.ModelViewSet):
                 )
 
             raw_items = parse_result.items
+            raw_items = autopilot_repair_raw_items(raw_items)
             logger.info(f"Парсинг завершен, извлечено {len(raw_items)} позиций")
+
+            # Re-parse должен быть идемпотентным: очищаем старые позиции файла
+            # перед сохранением нового результата, чтобы не смешивать прайсы.
+            ParsedItem.objects.filter(file=file_obj).delete()
             
             # Обновляем прогресс - парсинг завершен, начинаем обработку
             total_items = len(raw_items)
@@ -1323,21 +1330,102 @@ class ParseRunViewSet(viewsets.ReadOnlyModelViewSet):
         """
         limit = int(request.query_params.get('limit', 20))
         threshold = float(request.query_params.get('max_abs_delta', 20))
+        min_avg_confidence = float(request.query_params.get('min_avg_confidence', 3.0))
+        auto_rollback = str(request.query_params.get('auto_rollback', 'true')).lower() in {'1', 'true', 'yes'}
+        rollback_ttl_seconds = int(request.query_params.get('rollback_ttl_seconds', 1800))
         qs = self.get_queryset().filter(summary__shadow__isnull=False)[:limit]
         deltas = []
+        confidence_values = []
         for run in qs:
             shadow = (run.summary or {}).get('shadow') or {}
             delta = shadow.get('delta')
             if isinstance(delta, (int, float)):
                 deltas.append(float(delta))
+            conf_dict = ((run.summary or {}).get('meta') or {}).get('column_mapping_confidence') or {}
+            if not conf_dict:
+                conf_dict = (shadow.get('secondary_meta') or {}).get('column_mapping_confidence') or {}
+            if isinstance(conf_dict, dict):
+                for val in conf_dict.values():
+                    if isinstance(val, (int, float)):
+                        confidence_values.append(float(val))
         max_abs = max((abs(d) for d in deltas), default=0.0)
-        passed = max_abs <= threshold
+        avg_conf = (sum(confidence_values) / len(confidence_values)) if confidence_values else 0.0
+        passed = (max_abs <= threshold) and (avg_conf >= min_avg_confidence)
+
+        rollback_applied = False
+        rollback_reason = None
+        if auto_rollback and not passed:
+            cache.set('parser_canary_force_legacy', True, timeout=rollback_ttl_seconds)
+            rollback_applied = True
+            rollback_reason = 'canary_failed'
+        elif passed:
+            cache.delete('parser_canary_force_legacy')
+
         return Response({
             'passed': passed,
             'sample_size': len(deltas),
             'threshold_max_abs_delta': threshold,
             'observed_max_abs_delta': max_abs,
+            'threshold_min_avg_confidence': min_avg_confidence,
+            'observed_avg_confidence': avg_conf,
             'recent_deltas': deltas,
+            'confidence_samples': confidence_values,
+            'canary_force_legacy': bool(cache.get('parser_canary_force_legacy', False)),
+            'rollback_applied': rollback_applied,
+            'rollback_reason': rollback_reason,
+            'rollback_ttl_seconds': rollback_ttl_seconds if rollback_applied else 0,
+        })
+
+    @action(detail=False, methods=['post'])
+    def canary_reset(self, request):
+        """Сбросить принудительный rollback на legacy-парсер."""
+        cache.delete('parser_canary_force_legacy')
+        return Response({'status': 'ok', 'canary_force_legacy': False})
+
+    @action(detail=True, methods=['get'])
+    def recommendations(self, request, pk=None):
+        """
+        Рекомендации по неоднозначному маппингу колонок для конкретного ParseRun.
+        """
+        run = self.get_object()
+        meta = (run.summary or {}).get('meta') or {}
+        candidates_by_sheet = meta.get('column_mapping_candidates') or {}
+        if not candidates_by_sheet:
+            shadow = (run.summary or {}).get('shadow') or {}
+            candidates_by_sheet = (shadow.get('secondary_meta') or {}).get('column_mapping_candidates') or {}
+
+        ambiguity_gap = float(request.query_params.get('ambiguity_gap', 1.0))
+        min_score = float(request.query_params.get('min_score', 1.0))
+        recs = []
+        for sheet_name, field_opts in (candidates_by_sheet or {}).items():
+            if not isinstance(field_opts, dict):
+                continue
+            for field_name, options in field_opts.items():
+                if not isinstance(options, list) or not options:
+                    continue
+                top = options[0]
+                second = options[1] if len(options) > 1 else None
+                top_score = float(top.get('score', 0))
+                second_score = float(second.get('score', 0)) if second else 0.0
+                if top_score < min_score:
+                    continue
+                if second and abs(top_score - second_score) <= ambiguity_gap:
+                    recs.append({
+                        'sheet': sheet_name,
+                        'field': field_name,
+                        'recommended_header': top.get('header'),
+                        'recommended_column_index': top.get('column_index'),
+                        'top_score': top_score,
+                        'second_best': second,
+                        'all_candidates': options[:3],
+                    })
+
+        return Response({
+            'parse_run_id': run.id,
+            'ambiguity_gap': ambiguity_gap,
+            'min_score': min_score,
+            'recommendations': recs,
+            'count': len(recs),
         })
 
 
@@ -1357,7 +1445,17 @@ class ParsingFeedbackViewSet(viewsets.ModelViewSet):
     serializer_class = ParsingFeedbackSerializer
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        feedback = serializer.save(user=self.request.user)
+        auto_promote = str(self.request.query_params.get('auto_promote', 'true')).lower() in {'1', 'true', 'yes'}
+        if auto_promote and feedback.accepted:
+            try:
+                promote_feedback_to_mapping(
+                    feedback,
+                    scope=self.request.query_params.get('scope') or SupplierColumnMapping.SCOPE_SUPPLIER,
+                    confidence=self.request.query_params.get('confidence'),
+                )
+            except Exception as exc:
+                logger.warning(f"Auto-promote feedback #{feedback.id} skipped: {exc}")
 
     @action(detail=True, methods=['post'])
     def promote(self, request, pk=None):
@@ -1373,43 +1471,11 @@ class ParsingFeedbackViewSet(viewsets.ModelViewSet):
             )
 
         scope = request.data.get('scope') or SupplierColumnMapping.SCOPE_SUPPLIER
-        if scope not in {
-            SupplierColumnMapping.SCOPE_GLOBAL,
-            SupplierColumnMapping.SCOPE_SUPPLIER,
-            SupplierColumnMapping.SCOPE_EXACT_FILE,
-        }:
-            return Response({'error': 'Некорректный scope.'}, status=status.HTTP_400_BAD_REQUEST)
-
         confidence = request.data.get('confidence', feedback.confidence)
         try:
-            confidence = float(confidence)
-        except (TypeError, ValueError):
-            confidence = feedback.confidence
-
-        file_pattern = ''
-        if scope == SupplierColumnMapping.SCOPE_EXACT_FILE:
-            if feedback.parse_run and feedback.parse_run.file:
-                file_pattern = feedback.parse_run.file.original_filename
-            else:
-                return Response(
-                    {'error': 'Для scope=exact_file нужен parse_run с файлом.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        mapping, created = SupplierColumnMapping.objects.update_or_create(
-            supplier=feedback.supplier if scope == SupplierColumnMapping.SCOPE_SUPPLIER else None,
-            scope=scope,
-            source_column=feedback.source_column,
-            target_field=feedback.suggested_field,
-            defaults={
-                'confidence': confidence,
-                'file_pattern': file_pattern,
-                'meta': {
-                    'promoted_from_feedback_id': feedback.id,
-                    'note': feedback.note,
-                },
-            },
-        )
+            mapping, created = promote_feedback_to_mapping(feedback, scope=scope, confidence=confidence)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(
             {
                 'status': 'created' if created else 'updated',

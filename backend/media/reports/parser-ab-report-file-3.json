@@ -1,0 +1,38 @@
+{
+  "file_id": 3,
+  "file_name": "CBD Price Excel 07.05.xlsx",
+  "pipeline_legacy_items": 680,
+  "pipeline_v2_items": 680,
+  "delta_items": 0,
+  "legacy_coverage": {
+    "brewery": 1.0,
+    "beer_name": 0.9956,
+    "style": 1.0,
+    "abv": 0.9985,
+    "price": 1.0,
+    "volume": 1.0,
+    "format_type": 1.0,
+    "stock": 1.0
+  },
+  "v2_coverage": {
+    "brewery": 1.0,
+    "beer_name": 0.9956,
+    "style": 1.0,
+    "abv": 0.9985,
+    "price": 1.0,
+    "volume": 1.0,
+    "format_type": 1.0,
+    "stock": 1.0
+  },
+  "v2_status": "completed",
+  "v2_warnings": [
+    {
+      "code": "v2_bridge_mode",
+      "message": "ExcelPipelineV2 работает в bridge-режиме через legacy parser",
+      "severity": "warning",
+      "field_name": null,
+      "field": null
+    }
+  ],
+  "v2_errors": []
+}

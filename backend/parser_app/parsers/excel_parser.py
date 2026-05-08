@@ -718,8 +718,35 @@ class ExcelParser(BaseParser):
         if not col_mapping:
             logger.warning(f"Не удалось определить маппинг колонок для листа {sheet_name}")
             return items
+
+        # Пост-валидация маппинга для частого кейса:
+        # "НАЛИЧИЕ" ошибочно попадает в format_type, а "ТИП ТАРЫ" теряется.
+        # Это приводит к потере почти всех строк, т.к. format_type становится "МНОГО/МАЛО".
+        if hasattr(df, 'columns') and len(df.columns) > 0:
+            headers = [str(h).strip().lower() for h in df.columns.tolist()]
+
+            format_idx_by_header = None
+            stock_idx_by_header = None
+            for i, h in enumerate(headers):
+                if format_idx_by_header is None and any(k in h for k in ['тип тары', 'тара', 'формат', 'фасов']):
+                    format_idx_by_header = i
+                if stock_idx_by_header is None and any(k in h for k in ['налич', 'остат', 'stock']):
+                    stock_idx_by_header = i
+
+            current_format_idx = col_mapping.get('format_type')
+            if current_format_idx is not None and current_format_idx < len(headers):
+                current_format_header = headers[current_format_idx]
+                is_bad_format_col = any(k in current_format_header for k in ['налич', 'остат', 'stock'])
+                if is_bad_format_col and format_idx_by_header is not None:
+                    col_mapping['format_type'] = format_idx_by_header
+                    logger.info(
+                        f"Лист {sheet_name}: исправлен format_type {current_format_idx} -> {format_idx_by_header} "
+                        f"(заголовок '{df.columns[format_idx_by_header]}')"
+                    )
+                    if stock_idx_by_header is not None:
+                        col_mapping['stock'] = stock_idx_by_header
         
-        logger.debug(f"Используется маппинг для листа {sheet_name}: {col_mapping}")
+        logger.info(f"Лист {sheet_name}: итоговый маппинг колонок {col_mapping}")
         
         # Ищем все ценовые колонки в заголовках (может быть несколько: банки, кеги и т.д.)
         price_columns = {}  # {индекс_колонки: {'header': заголовок, 'format': формат, 'volume': объем}}
@@ -787,6 +814,38 @@ class ExcelParser(BaseParser):
                         
                         price_columns[idx] = price_col_info
                         logger.debug(f"Обнаружена ценовая колонка: {header} -> формат: {price_col_info['format']}, объем: {price_col_info['volume']}")
+
+        # Оставляем только "живые" ценовые колонки, где реально есть значения в данных.
+        # Иначе случайные заголовки типа "Стоимость" включают multi-price режим и режут выдачу.
+        active_price_columns = {}
+        if price_columns:
+            max_scan_rows = min(len(df), 120)
+            for col_idx, col_info in price_columns.items():
+                meaningful = 0
+                for scan_i in range(max_scan_rows):
+                    try:
+                        raw_val = df.iloc[scan_i, col_idx]
+                    except Exception:
+                        continue
+                    if pd.isna(raw_val):
+                        continue
+                    s = str(raw_val).strip()
+                    if not s:
+                        continue
+                    s_lower = s.lower()
+                    if s_lower in {'-', '—', '–', 'xx', 'хх', 'n/a', 'na', 'none', 'null'}:
+                        continue
+                    # Ценовое значение может быть числом или форматом "330 / 6600".
+                    if re.search(r'\d', s):
+                        meaningful += 1
+                if meaningful >= 3:
+                    active_price_columns[col_idx] = col_info
+            if price_columns and not active_price_columns:
+                logger.info(
+                    f"Лист {sheet_name}: ценовые колонки найдены по заголовкам, "
+                    "но не содержат данных — выключаем multi-price режим"
+                )
+        price_columns = active_price_columns
         
         # Парсим строки данных
         # Сохраняем последнюю заполненную пивоварню для заполнения пустых значений
@@ -809,6 +868,13 @@ class ExcelParser(BaseParser):
                     logger.debug(f"Установлена пивоварня по умолчанию: {default_brewery}")
             except Exception as e:
                 logger.warning(f"Ошибка при установке пивоварни по умолчанию: {str(e)}", exc_info=True)
+
+        # Multi-price режим нужен только когда формат не задан отдельной колонкой.
+        # Если есть явная колонка "тип тары/формат", стандартный построчный разбор корректнее.
+        format_idx = col_mapping.get('format_type')
+        use_multi_price = bool(price_columns and len(price_columns) > 1)
+        if use_multi_price and format_idx is not None and format_idx not in price_columns:
+            use_multi_price = False
         
         for idx, row in df.iterrows():
             try:
@@ -834,7 +900,7 @@ class ExcelParser(BaseParser):
                         pass
                 
                 # Если есть несколько ценовых колонок, создаем отдельный элемент для каждой
-                if price_columns and len(price_columns) > 1:
+                if use_multi_price:
                     # Извлекаем базовые данные один раз
                     base_item = self._extract_row_data(row, col_mapping, df, skip_price=True)
                     if base_item:
@@ -950,6 +1016,11 @@ class ExcelParser(BaseParser):
                         # Если все еще пустое, используем текущее значение brewery (но это уже нормализованное)
                         if not brewery_val_original:
                             brewery_val_original = item.get('brewery', '').strip() if item.get('brewery') else ''
+                        # Важно: дальнейшая обработка/сохранение элемента ниже находится в ветке
+                        # проверки brewery_val_original. Для строк без brewery задаем безопасный маркер,
+                        # чтобы не терять валидные позиции (частый кейс прайсов, где brewery не выделена).
+                        if not brewery_val_original:
+                            brewery_val_original = '__no_brewery__'
                     
                         beer_name_val_check = item.get('beer_name', '').strip() if item.get('beer_name') else ''
                         style_val_check = item.get('style', '').strip() if item.get('style') else ''
@@ -1482,9 +1553,19 @@ class ExcelParser(BaseParser):
                     # Проверяем наличие двоеточий (характерно для реальных названий)
                     has_colon = any(':' in str(val) for val in col_data[:5])
                     
+                    # Колонка "Описание" не должна назначаться на beer_name.
+                    is_description_header = any(k in header for k in ['описан', 'description', 'комментар', 'примечан'])
+                    # Колонка "Стиль" тоже не подходит как основное название.
+                    is_style_header = any(k in header for k in ['стиль', 'style'])
+
                     # Если это колонка с реальными названиями, добавляем в кандидаты
                     # Реальные названия должны иметь английские слова, паттерны или двоеточия
-                    is_real_name_col = (has_english_words or has_real_name_patterns or has_colon) and not is_egais_col
+                    is_real_name_col = (
+                        (has_english_words or has_real_name_patterns or has_colon)
+                        and not is_egais_col
+                        and not is_description_header
+                        and not is_style_header
+                    )
                     if is_real_name_col:
                         # Приоритет: колонка "Название" = 20, другие с реальными названиями = 10
                         priority = 20 if 'название' in header else (15 if has_colon else 10)
@@ -1508,7 +1589,11 @@ class ExcelParser(BaseParser):
                 best_idx, best_header, _ = best_candidate
                 
                 current_beer_name_idx = mapping.get('beer_name')
-                if current_beer_name_idx != best_idx:
+                # Не перезаписываем на "описание/стиль", даже если там много англ. слов.
+                if any(k in best_header for k in ['описан', 'description', 'комментар', 'примечан', 'стиль', 'style']):
+                    best_idx = None
+                
+                if best_idx is not None and current_beer_name_idx != best_idx:
                     logger.info(f"Устанавливаем колонку {best_idx} '{best_header}' как beer_name (вместо индекса {current_beer_name_idx})")
                     mapping['beer_name'] = best_idx
             
@@ -2158,31 +2243,20 @@ class ExcelParser(BaseParser):
                         return brewery
         
         # Паттерн 2: До скобки
+        # Важно: не считаем пивоварней любое верхнерегистровое имя перед скобкой.
+        # Принимаем только когда в скобках явный brewery-маркер (brew/brewed/пивоварня).
         match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ\s]+?)\s*\(', beer_name)
         if match:
             brewery = match.group(1).strip()
             # Проверяем, что это не слишком длинное (больше 50 символов - вероятно не пивоварня)
-            if len(brewery) <= 50:
+            m2 = re.search(r'\(([^)]{0,60})\)', beer_name)
+            hint = (m2.group(1).lower() if m2 else '')
+            if len(brewery) <= 50 and any(k in hint for k in ('brew', 'brewed', 'пивовар')):
                 return brewery
         
-        # Паттерн 3: Несколько слов в верхнем регистре в начале
-        # Ищем последовательность слов в верхнем регистре (минимум 2, максимум 5 слов)
-        match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ\s]{2,50}?)(?:\s+[a-zа-яё]|\s*\(|\s*$)', beer_name)
-        if match:
-            brewery = match.group(1).strip()
-            # Проверяем количество слов (пивоварня обычно 1-3 слова)
-            word_count = len(brewery.split())
-            if 1 <= word_count <= 5 and len(brewery) <= 50:
-                return brewery
-        
-        # Паттерн 4: Одно слово в верхнем регистре в начале (если оно не слишком короткое)
-        match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ]{2,30})\s+', beer_name)
-        if match:
-            brewery = match.group(1).strip()
-            # Проверяем, что это не обычное слово (например, не "IPA", "ALE")
-            common_words = ['ipa', 'ale', 'lager', 'stout', 'porter', 'pilsner', 'wheat', 'sour']
-            if brewery.upper() not in [w.upper() for w in common_words]:
-                return brewery
+        # Паттерны "любой UPPERCASE префикс" сознательно отключены:
+        # они ломают кейсы вроде "AND I GO BACK TO BLACK", где "AND"
+        # ошибочно считался пивоварней.
         
         return None
     

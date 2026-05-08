@@ -2554,31 +2554,20 @@ class ExcelParser(BaseParser):
                         return brewery
         
         # Паттерн 2: До скобки
+        # Важно: не считаем пивоварней любое верхнерегистровое имя перед скобкой.
+        # Принимаем только когда в скобках явный brewery-маркер (brew/brewed/пивоварня).
         match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ\s]+?)\s*\(', beer_name)
         if match:
             brewery = match.group(1).strip()
             # Проверяем, что это не слишком длинное (больше 50 символов - вероятно не пивоварня)
-            if len(brewery) <= 50:
+            m2 = re.search(r'\(([^)]{0,60})\)', beer_name)
+            hint = (m2.group(1).lower() if m2 else '')
+            if len(brewery) <= 50 and any(k in hint for k in ('brew', 'brewed', 'пивовар')):
                 return brewery
         
-        # Паттерн 3: Несколько слов в верхнем регистре в начале
-        # Ищем последовательность слов в верхнем регистре (минимум 2, максимум 5 слов)
-        match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ\s]{2,50}?)(?:\s+[a-zа-яё]|\s*\(|\s*$)', beer_name)
-        if match:
-            brewery = match.group(1).strip()
-            # Проверяем количество слов (пивоварня обычно 1-3 слова)
-            word_count = len(brewery.split())
-            if 1 <= word_count <= 5 and len(brewery) <= 50:
-                return brewery
-        
-        # Паттерн 4: Одно слово в верхнем регистре в начале (если оно не слишком короткое)
-        match = re.match(r'^([A-ZА-ЯЁ][A-ZА-ЯЁ]{2,30})\s+', beer_name)
-        if match:
-            brewery = match.group(1).strip()
-            # Проверяем, что это не обычное слово (например, не "IPA", "ALE")
-            common_words = ['ipa', 'ale', 'lager', 'stout', 'porter', 'pilsner', 'wheat', 'sour']
-            if brewery.upper() not in [w.upper() for w in common_words]:
-                return brewery
+        # Паттерны "любой UPPERCASE префикс" сознательно отключены:
+        # они ломают кейсы вроде "AND I GO BACK TO BLACK", где "AND"
+        # ошибочно считался пивоварней.
         
         return None
     

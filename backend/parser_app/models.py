@@ -78,6 +78,155 @@ class Supplier(models.Model):
         return self.name
 
 
+class SupplierColumnMapping(models.Model):
+    """
+    Ручные маппинги колонок для feedback-loop (v2 parser).
+    """
+
+    SCOPE_EXACT_FILE = 'exact_file'
+    SCOPE_SUPPLIER = 'supplier'
+    SCOPE_GLOBAL = 'global'
+    SCOPE_CHOICES = [
+        (SCOPE_EXACT_FILE, 'Точный файл'),
+        (SCOPE_SUPPLIER, 'Поставщик'),
+        (SCOPE_GLOBAL, 'Глобально'),
+    ]
+
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.CASCADE,
+        related_name='column_mappings',
+        null=True,
+        blank=True,
+        verbose_name='Поставщик',
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_SUPPLIER,
+        verbose_name='Область действия',
+    )
+    source_column = models.CharField(max_length=255, verbose_name='Исходная колонка')
+    target_field = models.CharField(max_length=100, verbose_name='Целевое поле')
+    file_pattern = models.CharField(max_length=255, blank=True, verbose_name='Паттерн файла')
+    confidence = models.FloatField(default=1.0, validators=[MinValueValidator(0)], verbose_name='Уверенность')
+    meta = models.JSONField(default=dict, blank=True, verbose_name='Метаданные')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Дата обновления')
+
+    class Meta:
+        verbose_name = 'Маппинг колонки поставщика'
+        verbose_name_plural = 'Маппинги колонок поставщиков'
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['scope', 'source_column']),
+            models.Index(fields=['target_field']),
+        ]
+
+    def __str__(self):
+        return f"{self.source_column} -> {self.target_field} ({self.scope})"
+
+
+class ParseRun(models.Model):
+    """
+    Аудит одного запуска парсера (legacy/v2/shadow).
+    """
+
+    file = models.ForeignKey(
+        'File',
+        on_delete=models.CASCADE,
+        related_name='parse_runs',
+        verbose_name='Файл',
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parse_runs',
+        verbose_name='Поставщик',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parse_runs',
+        verbose_name='Пользователь',
+    )
+    pipeline_version = models.CharField(max_length=50, default='legacy', verbose_name='Версия пайплайна')
+    status = models.CharField(max_length=20, verbose_name='Статус')
+    items_count = models.IntegerField(default=0, verbose_name='Количество позиций')
+    warning_count = models.IntegerField(default=0, verbose_name='Количество предупреждений')
+    error_count = models.IntegerField(default=0, verbose_name='Количество ошибок')
+    parse_kwargs = models.JSONField(default=dict, blank=True, verbose_name='Параметры запуска')
+    summary = models.JSONField(default=dict, blank=True, verbose_name='Сводка запуска')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата запуска')
+
+    class Meta:
+        verbose_name = 'Запуск парсинга'
+        verbose_name_plural = 'Запуски парсинга'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['pipeline_version', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"ParseRun #{self.id} [{self.pipeline_version}] {self.status}"
+
+
+class ParsingFeedback(models.Model):
+    """
+    Обратная связь по спорным сопоставлениям колонок.
+    """
+
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parsing_feedbacks',
+        verbose_name='Поставщик',
+    )
+    parse_run = models.ForeignKey(
+        ParseRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='feedback_items',
+        verbose_name='Запуск парсинга',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parsing_feedbacks',
+        verbose_name='Пользователь',
+    )
+    source_column = models.CharField(max_length=255, verbose_name='Исходная колонка')
+    suggested_field = models.CharField(max_length=100, verbose_name='Предложенное поле')
+    accepted = models.BooleanField(default=True, verbose_name='Принято')
+    confidence = models.FloatField(default=0.0, validators=[MinValueValidator(0)], verbose_name='Уверенность')
+    note = models.TextField(blank=True, verbose_name='Комментарий')
+    context = models.JSONField(default=dict, blank=True, verbose_name='Контекст')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата')
+
+    class Meta:
+        verbose_name = 'Обратная связь парсинга'
+        verbose_name_plural = 'Обратная связь парсинга'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['accepted', '-created_at']),
+            models.Index(fields=['source_column']),
+        ]
+
+    def __str__(self):
+        verdict = 'ok' if self.accepted else 'reject'
+        return f"{self.source_column} -> {self.suggested_field} ({verdict})"
+
+
 class File(models.Model):
     """
     Модель для хранения информации о загруженных файлах.

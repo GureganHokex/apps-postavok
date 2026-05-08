@@ -1478,6 +1478,9 @@ class ExcelParser(BaseParser):
         Returns:
             Обработанный элемент или None, если элемент не валиден
         """
+        if not item:
+            return None
+
         # Обработка пивоварни в зависимости от типа поставщика
         if supplier_type_enum == SupplierType.BREWERY:
             # Для частного поставщика ВСЕГДА устанавливаем название пивоварни

@@ -65,6 +65,10 @@ class DataNormalizer:
             Нормализованный словарь
         """
         normalized = item.copy()
+
+        # Частый кейс прайсов: "Brewery - Beer Name" в одном столбце.
+        # Если пивоварня не выделена отдельно, пытаемся аккуратно split-нуть.
+        normalized = self._split_brewery_prefix_from_beer_name(normalized)
         
         # Нормализация крепости
         if 'abv' in normalized:
@@ -144,6 +148,35 @@ class DataNormalizer:
             else:
                 normalized['brewery'] = normalized_brewery
         
+        return normalized
+
+    def _split_brewery_prefix_from_beer_name(self, normalized: Dict) -> Dict:
+        beer_name = str(normalized.get('beer_name') or '').strip()
+        brewery = str(normalized.get('brewery') or '').strip()
+        if brewery or not beer_name:
+            return normalized
+
+        # Поддерживаем самые частые разделители.
+        separators = [' - ', ' — ', ' – ', '|', ' / ']
+        left = right = None
+        for sep in separators:
+            if sep in beer_name:
+                parts = [p.strip() for p in beer_name.split(sep, 1)]
+                if len(parts) == 2 and parts[0] and parts[1]:
+                    left, right = parts
+                    break
+        if not left or not right:
+            return normalized
+
+        # Эвристика: левая часть должна быть похожа на название пивоварни,
+        # а правая — на товарную позицию.
+        if len(left) < 2 or len(left) > 80 or len(right) < 2:
+            return normalized
+        if any(ch.isdigit() for ch in left):
+            return normalized
+
+        normalized['brewery'] = left
+        normalized['beer_name'] = right
         return normalized
     
     def normalize_abv(self, abv_value) -> Optional[float]:

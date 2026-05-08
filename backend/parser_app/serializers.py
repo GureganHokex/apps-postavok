@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import (
     File, ParsedItem, FileMetadata, Order, Supplier,
-    TapLocation, Tap, AvailableBeer, UserProfile
+    TapLocation, Tap, AvailableBeer, UserProfile,
+    ParseRun, ParsingFeedback, SupplierColumnMapping
 )
 
 User = get_user_model()
@@ -232,4 +233,35 @@ class UserUpdateSerializer(serializers.Serializer):
     last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     email = serializers.EmailField(required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True, min_length=1)
+
+
+class ParseRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParseRun
+        fields = [
+            'id', 'file', 'supplier', 'user', 'pipeline_version', 'status',
+            'items_count', 'warning_count', 'error_count', 'parse_kwargs',
+            'summary', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class SupplierColumnMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SupplierColumnMapping
+        fields = [
+            'id', 'supplier', 'scope', 'source_column', 'target_field',
+            'file_pattern', 'confidence', 'meta', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ParsingFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParsingFeedback
+        fields = [
+            'id', 'supplier', 'parse_run', 'user', 'source_column', 'suggested_field',
+            'accepted', 'confidence', 'note', 'context', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'user']
 

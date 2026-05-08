@@ -812,6 +812,13 @@ class ExcelParser(BaseParser):
         
         for idx, row in df.iterrows():
             try:
+                # Значения по умолчанию, чтобы избежать UnboundLocalError
+                brewery_val_original = ''
+                beer_name_val_check = ''
+                style_val_check = ''
+                description_val_check = ''
+                format_type_val_check = ''
+
                 # КРИТИЧЕСКИ ВАЖНО: Сохраняем исходное значение brewery ДО извлечения данных
                 # Это нужно для проверки на город после нормализации
                 brewery_col_idx = col_mapping.get('brewery')
@@ -1050,6 +1057,9 @@ class ExcelParser(BaseParser):
                                 logger.debug(f"Установлена пивоварня для частного поставщика: {item['brewery']}")
                         else:
                             # Для дистрибьютора используем логику с предыдущей пивоварней
+                            if not item:
+                                logger.debug(f"Пропуск строки {idx} - пустой item после извлечения")
+                                continue
                             if not item.get('brewery') and last_brewery:
                                 # Нормализуем brewery (удаляем город) перед установкой
                                 from ..normalizers import DataNormalizer
@@ -1111,6 +1121,9 @@ class ExcelParser(BaseParser):
         Returns:
             Обработанный элемент или None, если элемент не валиден
         """
+        if not item:
+            return None
+
         # Обработка пивоварни в зависимости от типа поставщика
         if supplier_type_enum == SupplierType.BREWERY:
             # Для частного поставщика ВСЕГДА устанавливаем название пивоварни

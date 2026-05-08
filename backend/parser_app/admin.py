@@ -3,7 +3,17 @@
 """
 
 from django.contrib import admin
-from .models import File, ParsedItem, FileMetadata, Order, Supplier, UserProfile
+from .models import (
+    File,
+    ParsedItem,
+    FileMetadata,
+    Order,
+    Supplier,
+    UserProfile,
+    ParseRun,
+    ParsingFeedback,
+    SupplierColumnMapping,
+)
 
 
 @admin.register(File)
@@ -49,4 +59,25 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'role')
     list_filter = ('role',)
     search_fields = ('user__username',)
+
+
+@admin.register(ParseRun)
+class ParseRunAdmin(admin.ModelAdmin):
+    list_display = ('id', 'file', 'pipeline_version', 'status', 'items_count', 'created_at')
+    list_filter = ('pipeline_version', 'status', 'created_at')
+    search_fields = ('file__original_filename',)
+
+
+@admin.register(ParsingFeedback)
+class ParsingFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('id', 'source_column', 'suggested_field', 'accepted', 'confidence', 'created_at')
+    list_filter = ('accepted', 'created_at')
+    search_fields = ('source_column', 'suggested_field')
+
+
+@admin.register(SupplierColumnMapping)
+class SupplierColumnMappingAdmin(admin.ModelAdmin):
+    list_display = ('id', 'supplier', 'scope', 'source_column', 'target_field', 'confidence', 'updated_at')
+    list_filter = ('scope', 'updated_at')
+    search_fields = ('source_column', 'target_field', 'supplier__name')
 

@@ -20,7 +20,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from .models import (
     File, ParsedItem, FileMetadata, Order, Supplier,
-    TapLocation, Tap, AvailableBeer, TapChangeHistory, UserProfile
+    TapLocation, Tap, AvailableBeer, TapChangeHistory, UserProfile,
+    ParseRun, ParsingFeedback, SupplierColumnMapping
 )
 from .validators import ParsedItemValidator
 from .serializers import (
@@ -28,6 +29,7 @@ from .serializers import (
     OrderSerializer, OrderCreateSerializer, SupplierSerializer,
     TapLocationSerializer, TapLocationListSerializer, TapSerializer, AvailableBeerSerializer,
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
+    ParseRunSerializer, ParsingFeedbackSerializer, SupplierColumnMappingSerializer,
 )
 from .parsers.pdf_parser import PDFParser
 from .parsers.excel_parser import ExcelParser
@@ -44,6 +46,9 @@ from .permissions import (
     CanEditTapsContent,
 )
 from .auth_views import SessionAuthenticationNoCSRF
+from .services.parse_dispatcher import dispatch_parse
+from .services.parse_run_service import persist_parse_run
+from .pipeline_v2 import ParseStatus
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +89,15 @@ class FileViewSet(viewsets.ModelViewSet):
                 logger.info(f"Используется маппинг поставщика: {supplier.name}")
             except Exception as e:
                 logger.warning(f"Не удалось загрузить поставщика {supplier_id_from_request}: {e}")
+        if supplier_column_mapping is None:
+            # Fallback на новый feedback-loop реестр: берем global mappings.
+            global_rows = SupplierColumnMapping.objects.filter(
+                scope=SupplierColumnMapping.SCOPE_GLOBAL
+            ).values('target_field', 'source_column')
+            if global_rows:
+                supplier_column_mapping = {}
+                for row in global_rows:
+                    supplier_column_mapping.setdefault(row['target_field'], []).append(row['source_column'])
         
         # Инициализируем прогресс
         cache.set(progress_key, {
@@ -94,21 +108,7 @@ class FileViewSet(viewsets.ModelViewSet):
             'processed_items': 0,
         }, timeout=600)  # 10 минут
         
-        # Определяем парсер в зависимости от типа файла
-        parser = None
-        # Получаем полный путь к файлу
-        file_full_path = Path(settings.MEDIA_ROOT) / file_obj.file_path
-        if file_obj.file_type == 'pdf':
-            parser = PDFParser(str(file_full_path))
-        elif file_obj.file_type == 'excel':
-            parser = ExcelParser(str(file_full_path))
-        elif file_obj.file_type == 'google_sheets':
-            parser = GoogleSheetsParser(
-                str(file_full_path),
-                file_obj.google_sheet_url
-            )
-        
-        if not parser:
+        if file_obj.file_type not in ('pdf', 'excel', 'google_sheets'):
             return Response(
                 {'error': 'Неизвестный тип файла'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -130,6 +130,14 @@ class FileViewSet(viewsets.ModelViewSet):
                 parse_kwargs['brewery_name'] = brewery_name_from_request
             if supplier_column_mapping is not None:
                 parse_kwargs['supplier_column_mapping'] = supplier_column_mapping
+            # Оркестровый rollout-контур: можно принудительно запустить shadow/v2
+            # для конкретного запроса без рестарта сервера.
+            if 'shadow_mode' in request.data:
+                parse_kwargs['__shadow_mode_override'] = bool(request.data.get('shadow_mode'))
+            if 'use_v2' in request.data:
+                parse_kwargs['__use_v2_override'] = bool(request.data.get('use_v2'))
+            if 'force_legacy' in request.data:
+                parse_kwargs['__force_legacy_override'] = bool(request.data.get('force_legacy'))
             
             # Обновляем прогресс - парсинг начался
             try:
@@ -143,7 +151,24 @@ class FileViewSet(viewsets.ModelViewSet):
             except Exception as cache_err:
                 logger.warning(f"Ошибка обновления прогресса в кэше: {cache_err}")
             
-            raw_items = parser.parse(**parse_kwargs)
+            parse_result = dispatch_parse(file_obj, parse_kwargs)
+            persist_parse_run(
+                file_obj=file_obj,
+                parse_result=parse_result,
+                parse_kwargs=parse_kwargs,
+                user=request.user,
+                supplier_id=supplier_id_from_request,
+            )
+            if parse_result.status == ParseStatus.FAILED:
+                err_msg = 'Ошибка парсинга'
+                if parse_result.errors:
+                    err_msg = parse_result.errors[0].message
+                return Response(
+                    {'error': err_msg, 'details': [e.to_dict() for e in parse_result.errors]},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            raw_items = parse_result.items
             logger.info(f"Парсинг завершен, извлечено {len(raw_items)} позиций")
             
             # Обновляем прогресс - парсинг завершен, начинаем обработку
@@ -409,7 +434,13 @@ class FileViewSet(viewsets.ModelViewSet):
                 'total_errors': validation_stats['total_errors'],
                 'total_warnings': validation_stats['total_warnings'],
             },
-            'parser_stats': getattr(parser, 'stats', {}),
+            'parser_stats': parse_result.meta.get('parser_stats', {}),
+            'pipeline': {
+                'version': parse_result.meta.get('pipeline_version', 'legacy'),
+                'status': parse_result.status,
+                'warnings': [w.to_dict() for w in parse_result.warnings],
+                'shadow': parse_result.meta.get('shadow'),
+            },
         }
         metadata.save()
         
@@ -1241,4 +1272,149 @@ class UserViewSet(viewsets.ModelViewSet):
             )
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ParseRunViewSet(viewsets.ReadOnlyModelViewSet):
+    """История запусков парсинга. Только admin."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
+    permission_classes = [IsAuthenticated, IsAdmin]
+    queryset = ParseRun.objects.select_related('file', 'supplier', 'user').order_by('-created_at')
+    serializer_class = ParseRunSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        file_id = self.request.query_params.get('file_id')
+        supplier_id = self.request.query_params.get('supplier_id')
+        if file_id:
+            qs = qs.filter(file_id=file_id)
+        if supplier_id:
+            qs = qs.filter(supplier_id=supplier_id)
+        return qs
+
+    @action(detail=False, methods=['get'])
+    def drift(self, request):
+        """Сводка drift по shadow-замерам (delta item count)."""
+        qs = self.get_queryset().filter(summary__shadow__isnull=False)[:200]
+        total = qs.count()
+        with_shadow = 0
+        deltas = []
+        for run in qs:
+            shadow = (run.summary or {}).get('shadow') or {}
+            if shadow:
+                with_shadow += 1
+                delta = shadow.get('delta')
+                if isinstance(delta, (int, float)):
+                    deltas.append(delta)
+        avg_delta = (sum(deltas) / len(deltas)) if deltas else 0
+        return Response({
+            'total_runs': total,
+            'runs_with_shadow': with_shadow,
+            'avg_delta': avg_delta,
+            'max_abs_delta': max((abs(d) for d in deltas), default=0),
+        })
+
+    @action(detail=False, methods=['get'])
+    def canary_gate(self, request):
+        """
+        Простой canary gate по shadow-дельте.
+        Query:
+          - limit (default 20)
+          - max_abs_delta (default 20)
+        """
+        limit = int(request.query_params.get('limit', 20))
+        threshold = float(request.query_params.get('max_abs_delta', 20))
+        qs = self.get_queryset().filter(summary__shadow__isnull=False)[:limit]
+        deltas = []
+        for run in qs:
+            shadow = (run.summary or {}).get('shadow') or {}
+            delta = shadow.get('delta')
+            if isinstance(delta, (int, float)):
+                deltas.append(float(delta))
+        max_abs = max((abs(d) for d in deltas), default=0.0)
+        passed = max_abs <= threshold
+        return Response({
+            'passed': passed,
+            'sample_size': len(deltas),
+            'threshold_max_abs_delta': threshold,
+            'observed_max_abs_delta': max_abs,
+            'recent_deltas': deltas,
+        })
+
+
+class SupplierColumnMappingViewSet(viewsets.ModelViewSet):
+    """CRUD ручных маппингов колонок. Только admin."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
+    permission_classes = [IsAuthenticated, IsAdmin]
+    queryset = SupplierColumnMapping.objects.select_related('supplier').order_by('-updated_at')
+    serializer_class = SupplierColumnMappingSerializer
+
+
+class ParsingFeedbackViewSet(viewsets.ModelViewSet):
+    """CRUD feedback по сопоставлению колонок. Только admin."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
+    permission_classes = [IsAuthenticated, IsAdmin]
+    queryset = ParsingFeedback.objects.select_related('supplier', 'parse_run', 'user').order_by('-created_at')
+    serializer_class = ParsingFeedbackSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def promote(self, request, pk=None):
+        """
+        Promote accepted feedback into SupplierColumnMapping.
+        Body (optional): {"scope":"global|supplier|exact_file","confidence":0.95}
+        """
+        feedback = self.get_object()
+        if not feedback.accepted:
+            return Response(
+                {'error': 'Можно продвигать только accepted feedback.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        scope = request.data.get('scope') or SupplierColumnMapping.SCOPE_SUPPLIER
+        if scope not in {
+            SupplierColumnMapping.SCOPE_GLOBAL,
+            SupplierColumnMapping.SCOPE_SUPPLIER,
+            SupplierColumnMapping.SCOPE_EXACT_FILE,
+        }:
+            return Response({'error': 'Некорректный scope.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        confidence = request.data.get('confidence', feedback.confidence)
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = feedback.confidence
+
+        file_pattern = ''
+        if scope == SupplierColumnMapping.SCOPE_EXACT_FILE:
+            if feedback.parse_run and feedback.parse_run.file:
+                file_pattern = feedback.parse_run.file.original_filename
+            else:
+                return Response(
+                    {'error': 'Для scope=exact_file нужен parse_run с файлом.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        mapping, created = SupplierColumnMapping.objects.update_or_create(
+            supplier=feedback.supplier if scope == SupplierColumnMapping.SCOPE_SUPPLIER else None,
+            scope=scope,
+            source_column=feedback.source_column,
+            target_field=feedback.suggested_field,
+            defaults={
+                'confidence': confidence,
+                'file_pattern': file_pattern,
+                'meta': {
+                    'promoted_from_feedback_id': feedback.id,
+                    'note': feedback.note,
+                },
+            },
+        )
+        return Response(
+            {
+                'status': 'created' if created else 'updated',
+                'mapping': SupplierColumnMappingSerializer(mapping).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 

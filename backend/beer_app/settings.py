@@ -218,3 +218,8 @@ LOGGING = {
 # Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')  # В production обязательно задать
+
+# Strangler/feature flags для нового Excel pipeline.
+EXCEL_PARSER_PIPELINE_V2 = os.getenv('EXCEL_PARSER_PIPELINE_V2', 'false').lower() == 'true'
+PARSER_LEGACY_FORCE = os.getenv('PARSER_LEGACY_FORCE', 'false').lower() == 'true'
+PARSER_SHADOW_MODE = os.getenv('PARSER_SHADOW_MODE', 'false').lower() == 'true'

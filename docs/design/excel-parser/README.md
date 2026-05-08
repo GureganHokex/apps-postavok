@@ -120,8 +120,23 @@
 
 ## Verdict ревью
 
-**`pass-with-comments`** (полный текст —
-[`_review/architecture-review.md`](./_review/architecture-review.md)).
+**`pass-with-comments`** — два независимых прохода верификации
+сошлись на одном вердикте (полный текст в
+[`_review/architecture-review.md`](./_review/architecture-review.md);
+оба прохода живут в одном файле, второй пройден поверх первого без
+force-push).
+
+Итог второго прохода:
+
+> Архитектура достаточна для запуска harness-worker'а и
+> skeleton-worker'а: контракты стабильны, JSON Schema валидируется,
+> DTO согласованы (с поправкой M-4), все 14 осей покрыты,
+> mermaid-диаграммы согласованы (с поправкой M-2). Замечания M-1,
+> M-3, M-4, M-7 — must-fix перед началом V2-имплементации, остальные
+> M-/m- — желательные правки при следующем pass'е по
+> `architecture.md`.
+
+Итог первого прохода:
 
 > Архитектурный документ — содержательный, охватывает заявленный
 > объём, не имеет пропусков на уровне формальных acceptance.
@@ -134,29 +149,43 @@
 
 ### Реакция планнера на замечания
 
-Каждое замечание из таблицы §13 ревью получает явный адрес: либо
+Каждое замечание из обоих проходов ревью получает явный адрес: либо
 закрывается в первом же PR (skeleton + контракты), либо уезжает в
-отдельную задачу/issue, либо в migration plan.
+отдельную задачу/issue, либо в migration plan. ID `M-N` / `m-N`
+ссылаются на нумерацию из второго прохода
+`_review/architecture-review.md` §3; first-pass — на параллельные
+findings из его §2 / §13.
 
-| Severity | Замечание (краткое) | Принимается? | Куда уйдёт |
-|----------|---------------------|--------------|------------|
-| high | Ось 3: brewery-as-prefix внутри `beer_name` не покрыт | да | Action item #2: добавить `BrewerySplitter` в `architecture.md` §4 + `pipeline.py` (отдельный design-PR перед skeleton) |
-| high | `ParseWarning.field` vs `field_name` рассогласовано между arch.md / schema / pipeline.py | да | Action item #1: контракт-фикс единым PR (канон — `field`; pipeline.py использует `field_name` с `metadata={"json_name": "field"}`) |
-| high | `ParseError` наследование расходится между §5.1 и pipeline.py; противоречит §13 | да | Action item #1: канон — `ParseError` отдельный класс (как в pipeline.py), §5.1 и §13 правятся под него |
-| med | JSON Schema: `price`/`volume`/`stock` без `minimum: 0`; pattern не применяется к числам; `"12,50"` отклоняется | да | Action item #1 (тривиальный hotfix в schema) |
-| med | §6.3 `SupplierTypeDetector`: формула не нормализована | да | Action item #2 (тот же design-PR): `clip(sum, 0, 1)` или явная пометка «относительный score» |
-| med | §3 + schema: `format_type` — обязательный или нет? | да | Action item #1: добавить в `required` в schema (default есть, поведение consistent) |
-| med | §10.1: SLO без плана валидации | да | Action item #4 + migration plan: SLO валидируется harness'ом на ≥30 файлах из production (явный gate перед V5 «drop legacy») |
-| med | §5.2 vs pipeline.py: `LoaderError` vs `FileLoadError`; `RowExtractorWarning` без класса | да | Action item #1 (привести §5.2 к именам из pipeline.py) |
-| low | §4.1 vs §14.1: две pipeline-диаграммы без подписи редакции | да | Action item #2 (косметика в одном PR с brewery-splitter) |
-| low | §11 + §3 + §9: источник кандидата теряется при персистенции | принимается частично | issue «расширить `field_confidences` до `dict[str, Candidate]` или добавить `field_sources`» — **не блокер skeleton'а** |
-| low | §10.2: top-200 cols без статистики корпуса | да | Action item #4 (откалибровать на harness-корпусе вместе с порогами confidence) |
-| low | §9 опечатка «Petr-loop» → «Feedback-loop» | да | Action item #1 (one-liner) |
-| low | §15: multi-row + «50% числовых» — конфликт правил | да | Action item #2 (явный приоритет: multi-row кандидат → старт data = `max(rows)+1`, игнорировать 50%-правило в пределах кандидата) |
-| low | §6: не описан случай «никакой кандидат не закрыл optional поле» | да | Action item #2 (одна фраза в §6: `field_confidences[f]=0`, поле = `None`) |
-| low | §12: нет явного раздела «Rollback» | да | Action item #1 (одна фраза в §12: `flag=off` глобально, V1-фасад транспарентно откатывается) |
-| low | §7 / §9: коллизия lexicon vs БД-маппинг разрешается весами, но не прописана | да | Action item #2 (одна фраза в §7) |
-| low | §14.2 sequence: куда деваются `invalid_items` после loop'а | да | Action item #2 (одна фраза или mermaid-комментарий в §14.2) |
+| Severity | ID ревью | Замечание (краткое) | Принимается? | Куда уйдёт |
+|----------|----------|---------------------|--------------|------------|
+| high | first-pass | Ось 3: brewery-as-prefix внутри `beer_name` не покрыт (нет стадии для `"Paradox - Stout 5%"` → split) | да | Action item #2: добавить `BrewerySplitter` в `architecture.md` §4 + `pipeline.py` (отдельный design-PR перед skeleton) |
+| high | M-1 | §6.2: формула `content` для `stock` записана через логическое `∧`, без числового score → harness'у нечего калибровать | да | Action item #2: дать формулу `score = numeric_ratio * range_fit_stock * (1 - corr_with_price_col)` и описать поведение на пограничных колонках («цена с/без НДС», stock-mixed) |
+| high | M-3 + OQ-1 | §12 фасад `parse(...) -> list[dict]` логирует, но не возвращает `warnings`/`errors` → на границе «явный failure» теряется и противоречит §13 | да | Action item #1 + ADR: либо ввести параллельный `parse_strict()` / `parse_v2()`, возвращающий полный `ParseResult`, либо явно зафиксировать «двойную мораль» как осознанный компромисс совместимости |
+| high | M-4 (+ first-pass) | `ParseWarning.field` vs `field_name` и наследование `ParseError(ParseWarning)` рассогласованы между `architecture.md` §5.1 / `pipeline.py` / `parsed_item.schema.json` | да | Action item #1: канон — `field` в JSON; в pipeline.py хранить как `field_name` с `metadata={"json_name": "field"}`; `ParseError` — отдельный класс (как в pipeline.py), §5.1 и §13 правятся под него |
+| med | first-pass | JSON Schema: `price`/`volume`/`stock` без `minimum: 0`; pattern не применяется к числам; `"12,50"` отклоняется | да | Action item #1 (тривиальный hotfix в schema) |
+| med | M-7 | §4 Loader «снять защиту на чтение» противоречит §15 «без попыток обхода» (защищённые xlsx) | да | Action item #1 + ADR: зафиксировать одну стратегию (рекомендация — fail-fast `LoaderError("sheet_protected")`) |
+| med | M-5 | §4 ColumnMapper: поведение при user-mapping на несуществующую колонку не описано | да | Action item #1: warning `user_mapping_unknown_column` + fallback на header-based |
+| med | M-6 | §7 hot-reload только в DEBUG → нарушает §2.4 «без редеплоя» в проде | да | Action item #6 + #7: `manage.py reload_lexicons` + SIGHUP-handler + ADR fail-closed/fail-open на невалидном YAML |
+| med | first-pass | §6.3 `SupplierTypeDetector`: формула не нормализована | да | Action item #2 (тот же design-PR): `clip(sum, 0, 1)` или явная пометка «относительный score» |
+| med | first-pass / m-5 | §3 + schema: `format_type` — обязательный или нет? | да | Action item #1: добавить в `required` в schema (default есть, поведение consistent) |
+| med | M-8 | §10.1: SLO без плана валидации (нет инструмента: `pytest-benchmark` / собственный harness / time-замер в CI) | да | Action item #3 + migration plan: SLO валидируется harness'ом на ≥30 файлах из production (явный gate перед V5 «drop legacy») |
+| med | M-9 + OQ-3 | §6 voting `argmax` без агрегации: согласие нескольких источников уверенности не повышает | принимается частично | Открытые вопросы #1 (новый): нужно решение `argmax` vs `sum`/`mean` **до** старта Action item #4 (HeaderDetector калибруется первым) |
+| med | first-pass | §5.2 vs pipeline.py: `LoaderError` vs `FileLoadError`; `RowExtractorWarning` без класса | да | Action item #1 (привести §5.2 к именам из pipeline.py) |
+| low | M-2 | TL;DR (§1) не упоминает `MetaExtractor`, хотя он есть на всех 5 диаграммах | да | Action item #1 (one-liner в §1) |
+| low | first-pass | §4.1 vs §14.1: две pipeline-диаграммы без подписи редакции | да | Action item #2 (косметика в одном PR с brewery-splitter) |
+| low | first-pass | §11 + §3 + §9: источник кандидата теряется при персистенции | принимается частично | issue «расширить `field_confidences` до `dict[str, Candidate]` или добавить `field_sources`» — **не блокер skeleton'а** |
+| low | first-pass | §10.2: top-200 cols без статистики корпуса | да | Action item #4 (откалибровать на harness-корпусе вместе с порогами confidence) |
+| low | first-pass / m-1 | §9 опечатка «Petr-loop» → «Feedback-loop» | да | Action item #1 (one-liner) |
+| low | m-2 | §7: `file_hash_prefix` использован без определения | да | Action item #1: определить как «первые 8 hex-символов sha256 содержимого файла» |
+| low | first-pass | §15: multi-row + «50% числовых» — конфликт правил | да | Action item #2 (явный приоритет: multi-row кандидат → старт data = `max(rows)+1`, игнорировать 50%-правило в пределах кандидата) |
+| low | first-pass | §6: не описан случай «никакой кандидат не закрыл optional поле» | да | Action item #2 (одна фраза в §6: `field_confidences[f]=0`, поле = `None`) |
+| low | first-pass | §12: нет явного раздела «Rollback» | да | Action item #1 (одна фраза в §12: `flag=off` глобально, V1-фасад транспарентно откатывается) |
+| low | first-pass | §7 / §9: коллизия lexicon vs БД-маппинг разрешается весами, но не прописана | да | Action item #2 (одна фраза в §7) |
+| low | first-pass | §14.2 sequence: куда деваются `invalid_items` после loop'а | да | Action item #2 (одна фраза или mermaid-комментарий в §14.2) |
+| low | m-3 | §10.2 streaming-mode (`read_only=True`) vs §4.2 «однократное чтение в numpy-массив» — конфликт | да | Action item #2: явно сказать, какие стадии деградируют в streaming (RegionDetector, merge-handling) |
+| low | m-8 | §11 Prometheus `parser_rows_dropped_total{reason}` — кардинальность не ограничена | да | Action item #1: зафиксировать `reason` как enum |
+| low | m-9 | §4 Normalizer ABV `<1 → fraction` — false-positive на ≤0.5% non-alc | да | Action item #2: добавить риск в §15 + понижать confidence ABV в пограничной зоне |
+| low | m-11 | §9 `ParsingFeedback.expected: text, actual: text` — лучше JSONB | да | Action item #6 (модель Django при создании миграции) |
 
 Open questions из ревью (калибровка весов, корпус, YAML-реестры, БД-схема feedback,
 admin-UI) — корректно эскалированы, не блокируют design-фазу. Они уходят
@@ -254,37 +283,59 @@ admin-UI) — корректно эскалированы, не блокирую
 ## Открытые вопросы
 
 Нужны решения owner'а проекта/пользователя — без них следующие worker'ы
-не могут двигаться без рисков.
+не могут двигаться без рисков. Вопросы 1–3 — блокеры контракта v2,
+их нужно закрыть до старта Action item #1 / #4.
 
-1. **Калибровка весов источников и порогов confidence.** Дефолты
+1. **Voting strategy — `argmax` vs `sum`/`mean` (M-9 / OQ-3).** Сейчас
+   победитель — `argmax(score)`; согласие нескольких источников
+   (`header_exact + content + profile`, голосовавших за одну колонку)
+   уверенности не повышает. Вариант `sum`/`mean` требует ограничения
+   веса слабых источников (`position`, `profile`), иначе шумовое
+   голосование перевесит сильный `header_exact`. **Решение нужно до
+   старта калибровки harness'а** — иначе придётся перекалибровывать.
+   Уезжает в Action item #4.
+2. **Контракт фасада `parse(...) -> list[dict]` при
+   `ParseResult.status="failed"` (M-3 / OQ-1).** Возвращать пустой
+   `list[dict]` (как сейчас) с логированием, поднимать exception, или
+   ввести параллельный `parse_strict()` / `parse_v2()`,
+   возвращающий полный `ParseResult` без потери информации? От ответа
+   зависит API всех существующих вызывающих в Django-views и
+   use-case'ах. Уезжает в Action item #1.
+3. **Разрешение коллизии scope user-mapping (OQ-2).** Когда
+   одновременно совпадают `SupplierColumnMapping(scope="exact_file")`
+   и `SupplierColumnMapping(scope="supplier")` для одного запуска —
+   какой побеждает? Очевидное правило «чем уже scope, тем приоритетнее»
+   (`exact_file > supplier > global`) нужно зафиксировать в §9
+   архитектуры или как отдельный ADR. Уезжает в Action item #6.
+4. **Калибровка весов источников и порогов confidence.** Дефолты
    (`user=1.0 ... position=0.3`, `θ_field=0.45`, `θ_optional=0.30`,
    header-формула `0.4/0.3/0.2/0.1`, fuzzy-фильтры `0.85/0.7`) —
    placeholder. Нужны цифры с реального корпуса. Решается совместно с
    Action item #3 (harness готовит данные) и #4 (HeaderDetector
    калибруется первым).
-2. **Источники приватного корпуса прайсов.** Сколько файлов в нём, где
+5. **Источники приватного корпуса прайсов.** Сколько файлов в нём, где
    хранится (Git LFS submodule vs object storage), кто отвечает за
    анонимизацию ПДн / маскировку цен. От этого зависит SLA harness'а
    (`operations.md` §A.2) и gate миграции (минимум 30 файлов до V5).
-3. **Окончательный канон env-флага.** `EXCEL_PARSER_PIPELINE_V2` (прод)
+6. **Окончательный канон env-флага.** `EXCEL_PARSER_PIPELINE_V2` (прод)
    vs `PARSER_V2_ENABLED` (оркестрационное ТЗ): нужен ADR в `docs/adr/`
    с фиксацией одного имени, поведения алиаса и семантики
    `PARSER_LEGACY_FORCE`. Action item #7 не стартует без этого решения.
-4. **Φ_req — обязательные поля для item-level recall.** В `operations.md`
+7. **Φ_req — обязательные поля для item-level recall.** В `operations.md`
    §A.4 указан минимум `beer_name` + `price` «плюс доменные». Нужна
    фиксация: входят ли `volume`, `format_type`, `currency`, `brewery` в
    обязательное множество для `R_item^strict` (влияет на gate в §B.2).
-5. **Источник кандидата при персистенции `ParseRun`.** Расширять
+8. **Источник кандидата при персистенции `ParseRun`.** Расширять
    `field_confidences: dict[str, float]` до `dict[str, Candidate]` или
    добавить отдельное поле `field_sources: dict[str, str]`? Влияет на
    schema `parsed_item.schema.json` и на сложность post-mortem-анализа.
    Review-замечание (low), но решать до Action item #6 (модель
    `ParseRun.result`).
-6. **Promote-флоу синонимов в `field_lexicon.yaml`.** При `hits_count ≥ N`
+9. **Promote-флоу синонимов в `field_lexicon.yaml`.** При `hits_count ≥ N`
    на `SupplierColumnMapping` инфраструктура «предлагает» админу promote
    синоним. Кто фактический owner ревью этих PR (data-роль или backend)
    и какое значение `N` — нужно решение перед Action item #6.
-7. **Параллелизм листов.** `EXCEL_PARSER_PARALLEL_SHEETS` —
-   ThreadPool (I/O) vs ProcessPool (CPU). Принципиальный выбор отложен
-   до измерений на корпусе; зависит от профиля файла (узкие/широкие).
-   Не блокер, но желательно решить до Action item #5.
+10. **Параллелизм листов.** `EXCEL_PARSER_PARALLEL_SHEETS` —
+    ThreadPool (I/O) vs ProcessPool (CPU). Принципиальный выбор отложен
+    до измерений на корпусе; зависит от профиля файла (узкие/широкие).
+    Не блокер, но желательно решить до Action item #5.

@@ -88,13 +88,13 @@
       "handoffPath": "handoffs/aggregate-design.md",
       "startedAt": "2026-05-08T18:26:36.051Z",
       "finishedAt": "2026-05-08T18:33:29.537Z",
-      "lastUpdate": "2026-05-08T18:33:29.537Z",
+      "lastUpdate": "2026-05-08T18:33:32.459Z",
       "note": null,
+      "attempts": 1,
       "slackTs": null,
       "prNumber": 6,
       "failureMode": null,
-      "verification": null,
-      "attempts": 1
+      "verification": "not-verified"
     }
   ],
   "attention": [
@@ -121,6 +121,10 @@
     {
       "at": "2026-05-08T18:26:36.045Z",
       "message": "design-architecture: verification recorded (unit-test-verified) by verifier review-architecture"
+    },
+    {
+      "at": "2026-05-08T18:33:32.459Z",
+      "message": "aggregate-design: verification self-reported (not-verified)"
     }
   ]
 }

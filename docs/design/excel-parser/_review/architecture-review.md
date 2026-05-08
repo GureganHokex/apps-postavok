@@ -480,3 +480,179 @@ acceptance worker'а. Найденные замечания — design-инко�
 именно skeleton-стадия закрепит контракты в коде. Регрессионный
 harness и калибровка порогов — корректно вынесены в follow-up
 worker'ы.
+
+---
+
+## Second-pass verifier review (independent run)
+
+Verdict: pass-with-comments
+
+Запущен второй независимый проход верификации поверх той же ветки `orch/excel-parser-resilient-design/design-architecture`. Совпадает с первой проходкой по итоговому вердикту (`pass-with-comments`). Ниже — дополнения и пересечения с первой проходкой; ничего из первого ревью не отменяется.
+
+Verdict: pass-with-comments
+
+# Critical review of `docs/design/excel-parser/architecture.md`
+
+Документ ревьюится в составе artefact'ов worker'а `design-architecture` на ветке `orch/excel-parser-resilient-design/design-architecture`:
+
+- `docs/design/excel-parser/architecture.md` — 860 строк, 15 разделов, 5 mermaid-диаграмм.
+- `docs/design/excel-parser/contracts/parsed_item.schema.json` — 152 строки, JSON Schema draft-07.
+- `docs/design/excel-parser/contracts/pipeline.py` — 562 строки, Protocol/dataclass DTO.
+
+## 1. Mechanical acceptance
+
+| Acceptance criterion (target task)                                                  | Result |
+|-------------------------------------------------------------------------------------|--------|
+| `architecture.md` создан и закоммичен в ветке worker'а                              | met    |
+| Все 15 разделов присутствуют (TL;DR / Требования / Контракт / Pipeline / Контракты / Confidence / Реестры / Расширяемость / Feedback / Performance / Observability / BC / Failure / Diagrams / Risks) | met    |
+| Минимум 2 mermaid-диаграммы внутри документа                                        | met (5: §4.1 flow, §12.1 migration, §14.1 pipeline, §14.2 sequence, §14.3 class) |
+| `parsed_item.schema.json` валиден как JSON Schema draft-07                          | met (`jsonschema.Draft7Validator.check_schema(...)` → OK; positive sample валидируется, 4 negative sample корректно отклонены) |
+| `pipeline.py` парсится python                                                       | met (`python -c 'import ast; ast.parse(...)'` → OK; модуль также успешно импортируется через `importlib.util` после регистрации в `sys.modules`) |
+| Все 14 осей изменчивости явно адресованы                                            | met (см. §3 ниже)                                       |
+
+## 2. Покрытие 14 осей изменчивости
+
+| #  | Ось                                                              | Status            | Где / комментарий                                                                                                          |
+|----|------------------------------------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------------|
+| 1  | Положение строки заголовков 1..N, multi-row                      | covered           | §4 `RegionDetector` (стр. 201–208) + `HeaderDetector` (стр. 210–217), §6.1 (стр. 444–460) явно описывает multi-row.         |
+| 2  | Номенклатура колонок, синонимы, опечатки, рус/англ, регистр      | covered           | §4 `ColumnMapper` (стр. 218–240) — exact/stem/fuzzy/embedding; §6.2 (стр. 461–478); §7 (стр. 510–523) — `field_lexicon.yaml`. |
+| 3  | Distributor vs Brewery, brewery в префиксе/имени файла            | covered           | §4 `RegionDetector`+`SheetClassifier`; §6.3 (стр. 479–490) `SupplierTypeDetector` confidence; supplier_hints.yaml.          |
+| 4  | Множество листов, в т.ч. служебные                               | covered           | §4 `SheetClassifier` (стр. 182–192) — kind ∈ data/meta/trash.                                                                |
+| 5  | Объединённые ячейки и group-headers                              | covered           | §4 Loader unmerge (стр. 178), `RegionDetector` (стр. 201–208) делает group-header контекстом, `RowExtractor` (стр. 242–255) классифицирует kind=group_header. |
+| 6  | Цена и остаток в визуально похожих колонках                      | partially covered | §6.2 (стр. 470–472): "content (stock): numeric_ratio ∧ mean(values) ≤ 10000 ∧ diff_from_price_col". Концепция верная, но формула выражена через `∧` без числовой агрегации — см. замечание M-1. |
+| 7  | Format в виде иконок/коротких слов (банка, can, ж/б, кега…)      | covered           | §4 `Normalizer` → `FormatNormalizer` (стр. 264–266); §7 `format_lexicon.yaml`.                                              |
+| 8  | Объём `0,33 / 0.33 / 330 ml / 1/2 л`                             | covered           | §4 `VolumeNormalizer` (стр. 263); §7 `volume_patterns.yaml`; в `pipeline.py` есть `VolumePattern(regex, multiplier_to_litres)`. |
+| 9  | Валюта в отдельной колонке vs внутри строки цены ('250 руб')     | covered           | §4 `CurrencyNormalizer` (стр. 264) с примерами `250 руб / 250₽ / RUB 250 / $5`; §7 `currency_lexicon.yaml`.                   |
+| 10 | Сломанный xlsx (autoFilter, sharedStrings, защищённый лист)      | covered           | §4 Loader sanitize (стр. 170–174) — переносит логику текущего `_create_temp_file_without_filters`, плюс `sharedStrings.xml` и снятие защиты на чтение. Правда, на стр. 854 риски говорят "защищённые листы → `LoaderError('sheet_protected')`, без попыток обхода", что противоречит "снять защиту на чтение" в §4 — см. M-7. |
+| 11 | Пустые строки, разделители, промежуточные тоталы                 | covered           | §4 `RowExtractor` (стр. 242–255) — kind ∈ data/group_header/total/divider/noise.                                            |
+| 12 | Google Sheets как CSV                                            | covered           | §4 Loader (стр. 175) — `csv.Sniffer` для разделителя/кодировки.                                                              |
+| 13 | Мета-данные в имени файла или верхних строках                    | covered           | §4 `MetaExtractor` (стр. 194–199) — отдельная под-стадия, regex-реестр `meta_patterns.yaml`. NB: TL;DR (стр. 15) MetaExtractor пропускает — см. M-2. |
+| 14 | Пользовательский `supplier_column_mapping` извне                  | covered           | §4 `ColumnMapper` (стр. 220–227) — source `user`, weight 1.0; §9 (стр. 543–578) feedback-loop. Однако нет описания, что делать, если user mapping ссылается на несуществующую колонку — см. M-5. |
+
+Итого **14/14 covered**, из них одна — partial (`6` — цена vs остаток), остальные — со ссылками на конкретные разделы и строки.
+
+## 3. Замечания по существу
+
+Уровни: **B**locker (требует правки до merge) / **M**ajor (надо адресовать в этой или следующей итерации) / **m**inor (косметика).
+
+### B-блокеров не найдено.
+
+### M — major (надо адресовать)
+
+- **M-1. §6.2 (стр. 470–472), формула content-confidence для `stock` плохо формализована.**
+  Запись `numeric_ratio ∧ mean(values) ≤ 10000 ∧ diff_from_price_col` использует логическое `∧` для смешения булевых предикатов и числовых параметров, не давая числового score'а в `[0, 1]`. Это критическое место для оси 6 (price vs stock) — следующему worker'у с harness'ом не на что калиброваться. Нужно дать явную формулу (например, `score = numeric_ratio * range_fit_stock * (1 - corr_with_price_col)`), указать `range_fit` для стока, и описать как ведёт себя метрика на пограничных кейсах (одна и та же колонка содержит и цены, и остатки).
+
+- **M-2. TL;DR (§1, стр. 14–17) рассинхрон с реальной цепочкой.**
+  В TL;DR `Loader → SheetClassifier → RegionDetector → HeaderDetector → ColumnMapper → RowExtractor → Normalizer → Validator → Deduplicator → TelemetrySink` — `MetaExtractor` пропущен, хотя является отдельной стадией в §4.1, §4.2, §14.1, §14.2, §14.3 и обсуждается в осях 3 и 13. Читатель TL;DR делает неверную модель.
+
+- **M-3. §12 Backward compatibility (стр. 657–705) не описывает rollback из V2 в V0 при production-инциденте.**
+  Документ описывает `off → shadow → on → drop`, но не явно: что делать, если V2 на проде упал/выдал регрессию? Понятно, что флаг можно вернуть в `off`, но §13 (стр. 712–737) одновременно говорит "Тихий пустой результат запрещён" — а §12 фасад "Логирует warnings/errors, но не возвращает их (для совместимости)" (стр. 677). На границе фасада строгий `ParseResult.status` теряется. Нужно либо явно обозначить эту "двойную мораль" как сознательное компромиссное решение для совместимости, либо ввести второй внешний API (`parse_strict()` / `parse_v2()`), который возвращает полный `ParseResult` без потери информации. Иначе цель "явный failure вместо тишины" недостижима для существующих вызывающих.
+
+- **M-4. Несоответствие контрактов между `architecture.md` §5.1 (стр. 378–380) и `pipeline.py` (стр. 181–196):**
+  - markdown: `class ParseError(ParseWarning): pass` (наследование);
+  - pipeline.py: `ParseError` — отдельный dataclass, без наследования;
+  - markdown: поле `field` (стр. 376);
+  - pipeline.py: поле `field_name` (потому что `field` коллизит с `dataclasses.field`, стр. 187, 196);
+  - JSON Schema (`parsed_item.schema.json`, строка 146) использует поле `field` — соответствует markdown, но не pipeline.py.
+
+  Нужно унифицировать: либо переименовать поле в `field` через `dataclasses.field` workaround (`from dataclasses import field as _field`), либо переименовать в JSON Schema на `field_name`. Иначе при попытке скинуть `ParsedItem.warnings → JSON` через `dataclasses.asdict` сериализатор положит ключ `field_name`, который не валидируется текущей schema.
+
+- **M-5. §4 ColumnMapper и §6 — не описано поведение при конфликте user mapping с реальностью.**
+  Если в `SupplierColumnMapping.mapping` админ указал имя колонки, которой нет в текущем файле (например, поставщик переименовал колонку), что произойдёт? Пишется ли warning, есть ли fallback на header-based, или маппинг тихо игнорируется? §5.2 (стр. 401) описывает случай "не закрыты обязательные поля" → error, но конкретно "user mapping не сматчился" — отдельно не разобран.
+
+- **M-6. §7 hot-reload только в DEBUG (стр. 506–508).**
+  Это разумный default, но в проде нужен явный путь для админа поменять YAML-реестр без релиза. Иначе обещание §2.4 ("устойчивость = добавление синонимики без редеплоя") не выполняется. Минимум — описать SIGHUP / signal-handler / админ-команду `manage.py reload_lexicons`.
+
+- **M-7. §4 Loader (стр. 174) vs §15 Risks (стр. 854).**
+  В §4 написано "снять защиту на чтение" (для защищённых xlsx), а в рисках — "Loader возвращает `LoaderError('sheet_protected')`, без попыток обхода". Это противоположные стратегии. Решить и зафиксировать одну.
+
+- **M-8. §10 Performance (§10.1 SLO) — нет явного плана, как валидировать SLO.**
+  Сказано "regression harness ≥ 95% PASS на корпусе, P95 ≤ SLO" (стр. 708–709), но не указан инструмент (`pytest-benchmark` / собственный harness / time-замер в CI), на каком объёме корпуса (сколько файлов, какого размера), и как фиксировать baseline при изменениях. Performance-валидация остаётся на следующего worker'а — это ОК, но текущий документ должен явно сказать "harness + perf-CI определяются harness-worker'ом, веса 0.45/0.30 — placeholder". Сейчас формулировка слишком расплывчата.
+
+- **M-9. §6 voting (стр. 432–440) — argmax по score, без агрегации множественных голосов.**
+  Если три источника независимо проголосовали за колонку X (header_exact, content, profile) — победа всё равно достанется максимальному единичному score. Согласие нескольких источников не повышает уверенность. Это спорное решение для устойчивости; в текущем god-class profile/content fallback'и тоже работают по принципу "первое подходящее". Возможно, разумно — сумма или average ограниченных весов. Если решение принимается сознательно, нужно его обосновать (`sum`/`mean` приведёт к шумовым голосам position-fallback'а перевешивающим один сильный header_exact). В текущем виде — open question.
+
+### m — minor (косметика и форма)
+
+- **m-1.** §9 стр. 580 — "Petr-loop" — опечатка, должно быть "Feedback-loop" (или "обратная связь").
+- **m-2.** §7 стр. 508 — "индекс по `supplier_id` + `file_hash_prefix`" — `file_hash_prefix` нигде не определён выше; нужно сослаться или определить (например, "первые 8 hex-символов sha256 содержимого файла").
+- **m-3.** §10.2 стр. 596–612 vs §4 Loader стр. 165–168 — режим streaming "openpyxl read_only" для файлов > 20 МБ конфликтует с описанием Loader как "однократное чтение листа в numpy-массив". Стоит явно сказать, что в streaming-режиме теряется part of merge-handling и каких-то стадий (RegionDetector ?) — иначе SLO для крупных файлов под вопросом.
+- **m-4.** §4.1 mermaid (стр. 138–161) — `RegionDetector → HeaderDetector → ColumnMapper`, но `ColumnMapper` в §14.3 принимает `region` как аргумент (`headers, region, user, profile`). На диаграмме это сокрытое ребро. Не блокер, но иногда вводит в заблуждение.
+- **m-5.** §3 (стр. 117) — `format_type ∈ {"bottle", "can", "keg", "other", "unknown"}`. JSON Schema (стр. 64) и pipeline.py (стр. 213) согласованы. Но в табличке §3 у `format_type` нет `?`-маркера, а в JSON Schema поле не в `required`. Нужно либо явно сказать "default = 'unknown'", либо включить в `required`.
+- **m-6.** §5.1 markdown `ParsedItem` тело подменено на `# см. §3` (стр. 367–368). Это OK как cross-reference, но хочется хоть один полный псевдокод-блок где-то близко (полный есть в pipeline.py — этого достаточно, просто заметка).
+- **m-7.** `pipeline.py` `from __future__ import annotations` + `dataclass` + `Generic[T]` корректно проходят `ast.parse` и (с регистрацией в `sys.modules`) загружаются через `importlib`. Стандартный `python pipeline.py` запустить нельзя из-за известного quirk dataclasses при `__module__ is None` — это не баг файла, но документально хорошо бы пометить, что файл — псевдокод, не runnable script.
+- **m-8.** §11 Prometheus-метрики (стр. 647–652): `parser_column_confidence{field}` — 11 значений field — ОК; `parser_rows_dropped_total{reason}` — кардинальность не ограничена. Нужно зафиксировать, что `reason` — это enum (фиксированный набор), а не свободный текст из warnings.
+- **m-9.** §4.2 Normalizer для ABV (стр. 266) — "если число < 1, считаем долей". Это эвристика, которая ломается на 0.5%-non-alc beers. Достоинство — что есть `field_confidences[abv]`, можно понизить уверенность; но эвристику стоит зафиксировать в §15 Risks.
+- **m-10.** §8 (стр. 525–541) — добавление нового поля требует правок: Field enum + ParsedItem dataclass + JSON Schema + lexicon. Это означает, что "новое поле" — это releasable change, не registry-only. Не блокер, но "расширяемость без правок ядра" (§2.4) формально нарушается для добавления нового поля. Стоит уточнить, что речь о новых типах поставщиков и детекторах, а не о новых полях в ParsedItem.
+- **m-11.** §9 `ParsingFeedback.expected: text, actual: text` (стр. 568–569) — лучше JSONB, потому что админ может правит mapping не одной строкой, а dict'ом.
+
+## 4. Контракты модулей
+
+Каждый модуль в §5.1 имеет вход/выход, в §5.2 — поведение при провале. Ошибки прокидываются наверх через `ParseError`/`ParseWarning` (DTO) и `PipelineStageError` (исключения) — см. `pipeline.py` стр. 495–508. Проверка "магических полей" пройдена: всё типизировано через dataclass-frozen и Protocol с `runtime_checkable`. Замечание M-4 описывает рассогласование между `architecture.md` §5.1 и `pipeline.py` по полю `field`/`field_name` и наследованию `ParseError`.
+
+## 5. Confidence & voting
+
+§6 фиксирует:
+- веса источников (стр. 421–430), defaults в `pipeline.py` `PipelineConfig` (стр. 250–259);
+- формулу `score(c) = c.confidence * weight(c.source)` (стр. 432–436);
+- порог `θ_field = 0.45` для обязательных, `θ_optional = 0.30` (стр. 438–440);
+- tie-break по 3 правилам (стр. 474–477);
+- ambiguous-путь — UI-fallback (стр. 440), таблица в БД для feedback (§9).
+
+Замечания: **M-1** (формула для stock), **M-9** (нет агрегации множественных голосов).
+
+## 6. Backward compatibility
+
+§12 описывает фасад, feature flag `EXCEL_PARSER_PIPELINE_V2` с тремя значениями, 5-этапный rollout. Замечания: **M-3** (rollback и потеря строгого ParseResult на границе фасада).
+
+## 7. Расширяемость
+
+§7+§8 — реестры и plug-in points. Реестры (YAML + БД) зафиксированы в таблице (стр. 495–504). Feedback-loop §9 не противоречит реестрам: правки админа живут в БД, после `hits_count ≥ N` идёт PR в YAML — единый source of truth сохраняется. Замечание **m-10** (новое поле всё-таки требует правок ядра) не критично.
+
+## 8. Производительность
+
+§10 SLO измеримы (P95 ≤ 2с, ≤ 8с, streaming-mode для > 20 МБ). План валидации — см. **M-8**.
+
+## 9. Mermaid соответствие тексту
+
+5 диаграмм в документе:
+- §4.1 (стр. 138–161): pipeline flow с telemetry — соответствует §4.2.
+- §12.1 (стр. 699–706): migration roadmap V0→V5.
+- §14.1 (стр. 743–757): pipeline (повтор).
+- §14.2 (стр. 761–805): sequence для одного файла. Соответствует §4.2; loop per data sheet корректен.
+- §14.3 (стр. 809–844): class-диаграмма Pipeline + 11 Protocol-стадий. Соответствует `pipeline.py`.
+
+Рассинхрон только один: §1 TL;DR не содержит `MetaExtractor`, хотя все диаграммы его показывают (см. **M-2**).
+
+## 10. Сравнение с текущим god-class
+
+§10.3 (стр. 614–622) даёт явную сравнительную таблицу. §2.1 описывает текущие проблемы. §12 описывает миграцию через DDD-инфраструктуру, которая уже частично существует (`infrastructure/parsers/excel/`).
+
+Концептуальная сложность, которая **уходит**:
+- 4 fallback-стратегии чтения листа → одна стратегия Loader с явным sanitize.
+- Хардкоженные top-N лимиты → конфигурируемые с векторизацией.
+- Тихая постпроверка `stock vs format_type` → явный content-based кандидат с warning.
+- Hardcoded имена ('paradox', 'alisperi', 'two peaks') → YAML.
+- Тихий пустой результат → `ParseResult.status` (с оговоркой M-3).
+
+Концептуальная сложность, которая **остаётся**:
+- multi-row headers — новое требование, риск признан явно (стр. 850).
+- ambiguous columns (price vs stock) — формализовано, но формула требует калибровки (M-1).
+- profile-detection — переехало с эвристики на confidence-формулу (§6.3), но факт несколько профилей и нескольких источников остаётся.
+- xls (legacy) — `xlrd==1.2.0` или `libreoffice`-fallback (§4 Loader, стр. 173–174) — наследие.
+
+## 11. Открытые вопросы из handoff'а worker'а
+
+Worker отметил 5 follow-up'ов: regression harness, skeleton-имплементация, YAML-реестры, БД-схема feedback, UI ambiguous. Все они решаются параллельными worker'ами на следующих итерациях оркестрации; эскалации к планнеру не требуют. Конкретные числовые пороги (0.45 / 0.30 / веса источников) — placeholder, калибровка ответственность harness-worker'а; это явно зафиксировано в §6 и в handoff'е, проблем нет.
+
+Не задано worker'ом, но требует решения планнера (через next worker):
+
+- **OQ-1.** Как себя ведёт фасад `parse(...) → list[dict]` при `ParseResult.status = "failed"`? Возвращать пустой список (M-3) или поднимать exception? От ответа зависит API-контракт всех существующих вызывающих.
+- **OQ-2.** Single user mapping (§4 ColumnMapper источник `user`) — это per-file, per-supplier или per-tenant? Документ говорит про `scope = exact_file | supplier | global` (§9), но как разрешается конфликт между user-маппингом supplier-уровня и user-маппингом file-уровня в одном `ColumnMapper.map(...)` вызове, не описано.
+- **OQ-3.** Voting strategy (M-9) — argmax vs sum/mean. Решить до начала harness-калибровки.
+
+## 12. Итоговый вердикт
+
+`pass-with-comments`.
+
+Архитектура достаточна для запуска harness-worker'а и skeleton-worker'а: контракты стабильны, JSON Schema валидируется, DTO согласованы (с поправкой M-4), все 14 осей покрыты, mermaid-диаграммы согласованы (с поправкой M-2). Замечания M-1, M-3, M-4, M-7 — must-fix перед началом V2-имплементации, остальные M-/m- — желательные правки при следующем pass'е по `architecture.md`.

@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://apps-postavok/schemas/parsed_item.schema.json",
+  "title": "ParsedItem",
+  "description": "Финализированный DTO одной строки прайс-листа. Возвращается из стадии Normalizer и сохраняется как часть ParseResult.items.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "beer_name",
+    "source_sheet",
+    "source_row",
+    "confidence",
+    "field_confidences"
+  ],
+  "properties": {
+    "brewery": {
+      "description": "Название пивоварни. null для пивоварен-самоварен, где имя берётся из метаданных файла.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "beer_name": {
+      "description": "Название позиции. Обязательное поле.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "style": {
+      "description": "Стиль пива (IPA, stout, ...). Опционально.",
+      "type": ["string", "null"],
+      "maxLength": 255
+    },
+    "abv": {
+      "description": "Алкоголь, объёмные проценты. Нормализован: значения из файла, выраженные как доля (0.055), приводятся к процентам (5.5).",
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "ibu": {
+      "description": "Горечь по шкале IBU.",
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 200
+    },
+    "price": {
+      "description": "Цена за единицу в нормализованной валюте. Decimal, сериализуется как строка для сохранения точности.",
+      "type": ["string", "number", "null"],
+      "pattern": "^\\d+(\\.\\d+)?$"
+    },
+    "currency": {
+      "description": "Нормализованная валюта (ISO-4217 либо RUB/USD/EUR).",
+      "type": ["string", "null"],
+      "minLength": 3,
+      "maxLength": 8
+    },
+    "volume": {
+      "description": "Нормализованный объём в литрах. Decimal как строка.",
+      "type": ["string", "number", "null"],
+      "pattern": "^\\d+(\\.\\d+)?$"
+    },
+    "format_type": {
+      "description": "Тип фасовки: bottle, can, keg, other, unknown.",
+      "type": "string",
+      "enum": ["bottle", "can", "keg", "other", "unknown"]
+    },
+    "stock": {
+      "description": "Остаток на складе. Целое число или Decimal в строковом виде.",
+      "type": ["string", "number", "null"],
+      "pattern": "^\\d+(\\.\\d+)?$"
+    },
+    "description": {
+      "description": "Произвольное описание/комментарий из источника.",
+      "type": ["string", "null"],
+      "maxLength": 4096
+    },
+    "source_sheet": {
+      "description": "Имя листа в исходном workbook.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source_row": {
+      "description": "1-based индекс строки в листе-источнике.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "confidence": {
+      "description": "Сводная уверенность по строке: min(field_confidences) для обязательных полей, weighted-mean для опциональных. Диапазон [0, 1].",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "field_confidences": {
+      "description": "Уверенность по каждому полю отдельно. Ключи — имена полей ParsedItem, значения в [0, 1].",
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "propertyNames": {
+        "enum": [
+          "brewery",
+          "beer_name",
+          "style",
+          "abv",
+          "ibu",
+          "price",
+          "currency",
+          "volume",
+          "format_type",
+          "stock",
+          "description"
+        ]
+      }
+    },
+    "warnings": {
+      "description": "Предупреждения, привязанные к строке (нестрогая валидация, низкая уверенность, неудачная нормализация).",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ParseWarning"
+      },
+      "default": []
+    }
+  },
+  "definitions": {
+    "ParseWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Машинно-читаемый код предупреждения (snake_case)."
+        },
+        "message": {
+          "type": "string",
+          "description": "Человекочитаемое сообщение."
+        },
+        "sheet": {
+          "type": ["string", "null"]
+        },
+        "row": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "field": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

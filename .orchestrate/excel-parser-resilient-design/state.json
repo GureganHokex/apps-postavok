@@ -14,32 +14,32 @@
       "resultStatus": "finished",
       "handoffPath": "handoffs/design-architecture.md",
       "startedAt": "2026-05-08T18:09:38.827Z",
-      "finishedAt": "2026-05-08T18:18:46.972Z",
-      "lastUpdate": "2026-05-08T18:26:37.122Z",
+      "finishedAt": "2026-05-08T18:18:46.918Z",
+      "lastUpdate": "2026-05-08T18:18:47.832Z",
       "note": "respawned by self-planner (was error; attempts=1)",
       "attempts": 2,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": "unit-test-verified"
+      "verification": "type-check-only"
     },
     {
       "name": "review-architecture",
       "type": "verifier",
-      "branch": "`orch/excel-parser-resilient-design/design-architecture` (commit `00acd51` — review only adds `docs/design/excel-parser/_review/architecture-review.md`, не трогает артефакты worker'а)",
+      "branch": "orch/excel-parser-resilient-design/design-architecture",
       "startingRef": "orch/excel-parser-resilient-design/design-architecture",
       "dependsOn": [
         "design-architecture"
       ],
-      "agentId": "bc-3641eb7b-296f-4869-8cc9-e90b50c02464",
-      "runId": "run-bbdf0468-1bd6-46d8-ac0c-e565b1f7640b",
+      "agentId": "bc-7d3757d7-7638-4bc7-8f10-a5db2395659e",
+      "runId": "run-ffd46bfb-84f1-4542-a5ce-7fede63ea33a",
       "parentAgentId": "bc-155206e2-411c-4b3e-adeb-64b259df9ff0",
       "status": "handed-off",
       "resultStatus": "finished",
       "handoffPath": "handoffs/review-architecture.md",
-      "startedAt": "2026-05-08T18:18:52.229Z",
-      "finishedAt": "2026-05-08T18:26:35.108Z",
-      "lastUpdate": "2026-05-08T18:26:35.109Z",
+      "startedAt": "2026-05-08T18:18:47.836Z",
+      "finishedAt": "2026-05-08T18:30:27.738Z",
+      "lastUpdate": "2026-05-08T18:30:27.739Z",
       "note": null,
       "slackTs": null,
       "prNumber": null,
@@ -55,20 +55,20 @@
       "dependsOn": [
         "design-architecture"
       ],
-      "agentId": "bc-254ccd2d-7368-49d9-b71e-a4cd53cff944",
-      "runId": "run-afd0770c-012b-4c36-8d65-1644aee763be",
+      "agentId": "bc-cdf402e6-dd69-4e38-b6cf-eaf19409d36d",
+      "runId": "run-4a23e9e5-d050-4146-a079-0d43d0162520",
       "parentAgentId": "bc-155206e2-411c-4b3e-adeb-64b259df9ff0",
       "status": "handed-off",
       "resultStatus": "finished",
       "handoffPath": "handoffs/design-operations.md",
-      "startedAt": "2026-05-08T18:18:54.798Z",
-      "finishedAt": "2026-05-08T18:22:24.848Z",
-      "lastUpdate": "2026-05-08T18:22:25.801Z",
+      "startedAt": "2026-05-08T18:18:50.582Z",
+      "finishedAt": "2026-05-08T18:20:39.844Z",
+      "lastUpdate": "2026-05-08T18:20:39.844Z",
       "note": null,
       "slackTs": null,
-      "prNumber": 5,
+      "prNumber": null,
       "failureMode": null,
-      "verification": "not-verified",
+      "verification": null,
       "attempts": 1
     },
     {
@@ -83,18 +83,17 @@
       "agentId": null,
       "runId": null,
       "parentAgentId": null,
-      "status": "error",
+      "status": "pending",
       "resultStatus": null,
       "handoffPath": null,
-      "startedAt": "2026-05-08T18:26:46.176Z",
+      "startedAt": null,
       "finishedAt": null,
-      "lastUpdate": "2026-05-08T18:26:46.922Z",
-      "note": "spawn failed after 3 transient sub-attempts: l: [validation_error] Upgrade to Ultra for more Cloud Agents: You've reached the limit for your current plan. Upgrade to Ultra to run more Cloud Agents simultaneously.",
+      "lastUpdate": null,
+      "note": null,
       "slackTs": null,
       "prNumber": null,
-      "failureMode": "unknown",
-      "verification": null,
-      "attempts": 1
+      "failureMode": null,
+      "verification": null
     }
   ],
   "attention": [
@@ -107,28 +106,8 @@
       "message": "design-architecture: respawned by self-planner (was error)"
     },
     {
-      "at": "2026-05-08T18:18:47.009Z",
-      "message": "git-sync failed (design-architecture running -> handed-off): Command failed: git -C /workspace/.orchestrate/excel-parser-resilient-design commit -m orch: excel-parser-resilient-design design-architecture running -> handed-off\nfatal: cannot lock ref 'HEAD': is a…"
-    },
-    {
-      "at": "2026-05-08T18:18:49.014Z",
+      "at": "2026-05-08T18:18:47.833Z",
       "message": "design-architecture: verification self-reported (type-check-only)"
-    },
-    {
-      "at": "2026-05-08T18:22:25.801Z",
-      "message": "design-operations: verification self-reported (not-verified)"
-    },
-    {
-      "at": "2026-05-08T18:26:35.118Z",
-      "message": "git-sync failed (review-architecture running -> handed-off): Command failed: git -C /workspace/.orchestrate/excel-parser-resilient-design add /workspace/.orchestrate/excel-parser-resilient-design/state.json /workspace/.orchestrate/excel-parser-resilient-design/…"
-    },
-    {
-      "at": "2026-05-08T18:26:37.122Z",
-      "message": "design-architecture: verification recorded (unit-test-verified) by verifier review-architecture"
-    },
-    {
-      "at": "2026-05-08T18:26:47.732Z",
-      "message": "aggregate-design: spawn failed after 3 transient sub-attempts: l: [validation_error] Upgrade to Ultra for more Cloud Agents: You've reached the limit for your current plan. Upgrade to Ultra to run more Cloud Agents simultaneously."
     }
   ]
 }

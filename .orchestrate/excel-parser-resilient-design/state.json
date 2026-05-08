@@ -1,0 +1,98 @@
+{
+  "rootSlug": "excel-parser-resilient-design",
+  "tasks": [
+    {
+      "name": "design-architecture",
+      "type": "worker",
+      "branch": "orch/excel-parser-resilient-design/design-architecture",
+      "startingRef": "main",
+      "dependsOn": [],
+      "agentId": null,
+      "runId": null,
+      "parentAgentId": null,
+      "status": "running",
+      "resultStatus": null,
+      "handoffPath": null,
+      "startedAt": "2026-05-08T18:08:06.753Z",
+      "finishedAt": null,
+      "lastUpdate": "2026-05-08T18:08:06.753Z",
+      "note": null,
+      "slackTs": null,
+      "prNumber": null,
+      "failureMode": null,
+      "verification": null,
+      "attempts": 1
+    },
+    {
+      "name": "review-architecture",
+      "type": "verifier",
+      "branch": "orch/excel-parser-resilient-design/review-architecture",
+      "startingRef": "orch/excel-parser-resilient-design/design-architecture",
+      "dependsOn": [
+        "design-architecture"
+      ],
+      "agentId": null,
+      "runId": null,
+      "parentAgentId": null,
+      "status": "pending",
+      "resultStatus": null,
+      "handoffPath": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "lastUpdate": null,
+      "note": null,
+      "slackTs": null,
+      "prNumber": null,
+      "failureMode": null,
+      "verification": null
+    },
+    {
+      "name": "design-operations",
+      "type": "worker",
+      "branch": "orch/excel-parser-resilient-design/design-operations",
+      "startingRef": "main",
+      "dependsOn": [
+        "design-architecture"
+      ],
+      "agentId": null,
+      "runId": null,
+      "parentAgentId": null,
+      "status": "pending",
+      "resultStatus": null,
+      "handoffPath": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "lastUpdate": null,
+      "note": null,
+      "slackTs": null,
+      "prNumber": null,
+      "failureMode": null,
+      "verification": null
+    },
+    {
+      "name": "aggregate-design",
+      "type": "worker",
+      "branch": "orch/excel-parser-resilient-design/aggregate-design",
+      "startingRef": "main",
+      "dependsOn": [
+        "review-architecture",
+        "design-operations"
+      ],
+      "agentId": null,
+      "runId": null,
+      "parentAgentId": null,
+      "status": "pending",
+      "resultStatus": null,
+      "handoffPath": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "lastUpdate": null,
+      "note": null,
+      "slackTs": null,
+      "prNumber": null,
+      "failureMode": null,
+      "verification": null
+    }
+  ],
+  "attention": []
+}

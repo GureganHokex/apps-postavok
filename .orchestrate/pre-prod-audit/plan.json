@@ -1,0 +1,121 @@
+{
+  "$schema": "../../../home/ubuntu/.cursor/plugins/cache/cursor-public/9333/d1cdb88a9eb33cf392395c87e3fd76419fc1010e/skills/orchestrate/schemas/plan.schema.json",
+  "goal": "Проверь локалку, совместимость файлов, окружение и актуальность версий пакетов перед продом. Стек: Django 4.2 backend (Python 3.12 в Dockerfile, requirements.txt) + React 18 frontend (CRA / react-scripts 5, Node 18 в Dockerfile). Цель: до выкатки в прод собрать репорт по локальной сборке, согласованности .env-файлов и Dockerfile, совместимости артефактов между фронтом/бэком, актуальности и безопасности версий пакетов.",
+  "summary": "pre-prod audit: env, deps, local build smoke, file compatibility",
+  "rootSlug": "pre-prod-audit",
+  "baseBranch": "main",
+  "prBase": "main",
+  "repoUrl": "https://github.com/GureganHokex/apps-postavok",
+  "selfAgentId": "bc-332293e3-ac11-48b5-aa16-4ec1dbe76627",
+  "syncStateToGit": true,
+  "tasks": [
+    {
+      "name": "audit-env-config",
+      "type": "worker",
+      "openPR": true,
+      "scopedGoal": "Аудит конфигурации окружения и docker-инфраструктуры репозитория https://github.com/GureganHokex/apps-postavok перед продом. Цель — собрать репорт о согласованности env-файлов, Dockerfile, docker-compose, nginx-конфигов и Django settings.\n\nЧто проверить (кратко):\n1. Сравнить переменные между `.env.example` (корень), `backend/env.example`, `env.backend`, `docker-compose.backend.yml`, `frontend/Dockerfile` (`ARG REACT_APP_API_URL`), `frontend/nginx.conf` / `frontend/nginx.conf.template`, и тем что реально читает `backend/beer_app/settings.py` (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `CORS_ALLOWED_ORIGINS`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `DJANGO_TIME_ZONE`, `DJANGO_LANGUAGE_CODE`, `FRONTEND_DOMAIN`, `BACKEND_PORT`, `FRONTEND_PORT`, `REACT_APP_API_URL`).\n2. Найти расхождения: переменные, которые объявлены в env-файле, но не читаются кодом; переменные, которые читаются кодом, но отсутствуют в env-примерах; дефолты (например DEBUG=false vs CORS_ALLOW_ALL_ORIGINS под DEBUG); потенциально опасные дефолты для прода (`DJANGO_SECRET_KEY` дефолт, `ADMIN_PASSWORD=''`).\n3. Проверить `docker-compose.backend.yml`: `env_file: backend/env.example` (примеры в env_file — антипаттерн), `volumes: ./backend/db.sqlite3:/app/db.sqlite3` (bind на отсутствующий файл может создать директорию), `restart: unless-stopped`, отсутствие healthcheck и явных `EXPOSE 8000` совпадает.\n4. Проверить `backend/Dockerfile`: `python:3.12-slim`, `libtiff5` (в Debian Bookworm пакет переименован в `libtiff6` — потенциальный обвал build), `libjpeg62-turbo`, `libwebp-dev`, gunicorn ставится без пина, `entrypoint.sh` запускает `migrate` и `collectstatic` без флага `--clear`, gunicorn без `--access-logfile`/`--timeout`.\n5. Проверить `frontend/Dockerfile`: `node:18-alpine` (Node 18 EOL c 2025-04-30, см. https://nodejs.org/en/about/previous-releases), `npm ci --only=production=false` (deprecated синтаксис, корректно `npm ci --include=dev`), `nginx:alpine` без пина версии, `envsubst` подставляет только `FRONTEND_DOMAIN` — проверить, что nginx config действительно нуждается только в нём.\n6. Проверить `frontend/nginx.conf` vs `frontend/nginx.conf.template`: один из них может быть устаревшим (Dockerfile копирует только template). Проверить `proxy_pass http://backend:8000` — сервис называется `backend` в docker-compose, ОК. Но в `docker-compose.backend.yml` нет фронта; нужен общий compose-файл — отметить.\n7. Проверить `.gitignore` и `.dockerignore`: `.dockerignore` исключает `*.md` (в т.ч. README) и `Dockerfile*`, `docker-compose*.yml` — это корректно для backend-image, но проверить, что ничего нужного билду не теряется. `.gitignore` исключает `db.sqlite3` — но docker-compose монтирует его как volume — конфликт при первом запуске.\n8. Проверить `scripts/setup-production.sh`, `scripts/check-deployment.sh`, `scripts/start-ngrok.sh`, `scripts/generate-secret-key.py` — что они согласованы с реальной инфрой и не используют устаревшие пути/имена.\n9. Проверить `.github/workflows/backend.yml` — корректен ли путь к Dockerfile, нужны ли отдельные workflow для фронта.\n\nИтог:\n- Создать `docs/audits/env-config-audit-2026-05.md` с разделами: Summary, Findings (severity: high/med/low, каждый с цитированием файла и строки), Inconsistencies, Production blockers, Recommended fixes (упорядочены по приоритету).\n- Не редактировать конфиги — только репорт.",
+      "pathsAllowed": [
+        "docs/audits/**"
+      ],
+      "pathsForbidden": [
+        "backend/**",
+        "frontend/**",
+        "scripts/**",
+        ".github/**"
+      ],
+      "acceptance": [
+        "Файл docs/audits/env-config-audit-2026-05.md создан и закоммичен",
+        "Репорт явно перечисляет каждое расхождение между env-файлами с цитированием файла и переменной",
+        "Каждая находка имеет severity (high/med/low) и рекомендацию",
+        "Production blockers выделены отдельным разделом"
+      ]
+    },
+    {
+      "name": "audit-package-versions",
+      "type": "worker",
+      "openPR": true,
+      "scopedGoal": "Аудит актуальности и безопасности версий пакетов в репозитории https://github.com/GureganHokex/apps-postavok перед продом.\n\nИсходные файлы: `backend/requirements.txt`, `frontend/package.json`, `frontend/package-lock.json`, базовые образы в `backend/Dockerfile` (python:3.12-slim) и `frontend/Dockerfile` (node:18-alpine, nginx:alpine).\n\nПроверить:\n1. Python зависимости: каждое требование (Django 4.2.7, djangorestframework 3.14.0, django-cors-headers 4.3.1, pdfplumber 0.10.3, pytesseract 0.3.10, pandas>=2.2.0, openpyxl 3.1.2, google-api-python-client 2.108.0, Pillow>=10.3.0, reportlab 4.0.7, pypdf>=4.0.0, beautifulsoup4>=4.12.0, lxml>=4.9.0, python-dotenv 1.0.1) — последняя стабильная версия на 2026-05, наличие CVE (используй `pip index versions <pkg>` или PyPI и https://osv.dev/), Django LTS актуальность (4.2 LTS — поддержка до апреля 2026; 5.2 LTS — выпущен апрель 2025). Отметить, что всё в requirements.txt либо строго пиннуется (==), либо ставится по >= — это смесь, и >=2.2.0 для pandas в проде непредсказуемо.\n2. JS зависимости: `react-scripts: 5.0.1` (CRA — официально архивирован Facebook'ом, не получает обновлений), `react: ^18.2.0` (актуально 19.x), `@tanstack/react-query: ^5.90.10`, `axios: ^1.6.2` (последняя 1.7.x; 1.6.x имеет CVE по SSRF — проверить), `framer-motion: ^12.23.24`, `react-dnd: ^16.0.1` (deprecated на 2024+), `react-router-dom: ^6.20.0` (актуально 7.x), `recharts: ^2.10.3`, `zod: ^4.1.12`, `react-hook-form: ^7.66.1`, `yaml: ^2.8.2`, `react-hot-toast: ^2.6.0`, `react-dropzone: ^14.2.3`, `d3-*` пакеты, `victory-vendor: ^37.3.6` (странно, прямой импорт служебного пакета).\n3. Базовые образы: Node 18 — EOL 2025-04-30 (использовать 20 LTS / 22 LTS); Python 3.12 — поддержан до окт 2028, ОК; nginx:alpine — пин нужен для воспроизводимости.\n4. Запустить (если возможно в среде воркера) `pip install --dry-run` или `pip install -r backend/requirements.txt` в venv и `npm audit --omit=dev` в `frontend/` — собрать сводку CVE; если среда не позволяет — отметить и оставить выводы, основанные на публичных advisory.\n5. Отметить дубль определений: например, `frontend/package-lock.json` содержит lockfile для CRA — посмотреть на устаревшие транзитивы.\n\nИтог:\n- Создать `docs/audits/packages-audit-2026-05.md` с таблицами: Backend (package | current | latest | CVE | recommendation) и Frontend (то же), плюс разделы Base images, High-severity items, Recommendations (упорядочены по приоритету: critical, high, med, low).\n- Не менять requirements.txt / package.json — только репорт. Можно создать соседние файлы `docs/audits/*.txt` с сырыми outputами `pip` / `npm audit`.",
+      "pathsAllowed": [
+        "docs/audits/**"
+      ],
+      "pathsForbidden": [
+        "backend/requirements.txt",
+        "frontend/package.json",
+        "frontend/package-lock.json"
+      ],
+      "acceptance": [
+        "Файл docs/audits/packages-audit-2026-05.md создан и закоммичен",
+        "В репорте есть отдельные таблицы для backend (Python) и frontend (JS) с current/latest/CVE/recommendation",
+        "Учтены EOL базовых образов (Node 18 EOL, python 3.12 актуально)",
+        "High-severity items выделены отдельно"
+      ]
+    },
+    {
+      "name": "audit-local-build",
+      "type": "worker",
+      "openPR": true,
+      "scopedGoal": "Локальный smoke-build для backend (Django) и frontend (CRA) репозитория https://github.com/GureganHokex/apps-postavok. Цель — поймать ошибки локальной сборки/конфигурации до прод-билда.\n\nДействия (логирование stdout/stderr в файлы под `docs/audits/`):\n1. Backend:\n   - `python3 -m venv .venv && . .venv/bin/activate`\n   - `pip install -U pip && pip install -r backend/requirements.txt 2>&1 | tee docs/audits/backend-pip.log` (если установка системных зависимостей tesseract/poppler-utils отсутствует — отметить, продолжить).\n   - `cd backend && python manage.py check 2>&1 | tee ../docs/audits/backend-check.log`\n   - `python manage.py makemigrations --check --dry-run 2>&1 | tee ../docs/audits/backend-makemigrations.log` (показать, нет ли невыполненных миграций)\n   - `python manage.py migrate --noinput 2>&1 | tee ../docs/audits/backend-migrate.log` (на временном sqlite)\n   - `python manage.py collectstatic --noinput 2>&1 | tee ../docs/audits/backend-collectstatic.log`\n2. Frontend:\n   - `cd frontend && npm ci 2>&1 | tee ../docs/audits/frontend-npm-ci.log` (если node 18 недоступен — попробовать с node 20)\n   - `npm run build 2>&1 | tee ../docs/audits/frontend-build.log`\n   - `ls -la build && cat build/admin.html | head -20 && cat build/taps.html | head -20`\n3. Проверка совместимости артефактов:\n   - Frontend `build/` собран. Запустить `python -m http.server` или эквивалент для проверки, что admin.html и taps.html генерируются (`scripts/copy-taps-html.js`).\n   - `proxy: http://localhost:8000` в `frontend/package.json` против `backend/manage.py runserver 0.0.0.0:8000` — описать, как dev-режим CRA-pruxy совмещается с prod nginx.\n4. Создать `docs/audits/local-build-report-2026-05.md` с разделами:\n   - Окружение (python --version, node --version, npm --version, OS)\n   - Backend: status каждого шага (success/fail), summary критичных ошибок, список отсутствующих системных пакетов (tesseract-ocr, poppler-utils — backend/Dockerfile их ставит)\n   - Frontend: status, размер build/, список deprecated warnings из npm ci/build (CRA выкидывает пачку)\n   - Несовместимости/риски (например, react-scripts unsupported peer dep, zod major-version mismatch с RHF)\n   - Что обязательно починить до прода\n5. Все логи команд закоммитить в `docs/audits/*.log`. Ничего другого не менять.\n\nЕсли часть команд падает по нехватке системных tools (apt-get etc.) — продолжить и отразить это в репорте.",
+      "pathsAllowed": [
+        "docs/audits/**"
+      ],
+      "pathsForbidden": [
+        "backend/**",
+        "frontend/**",
+        ".github/**"
+      ],
+      "acceptance": [
+        "docs/audits/local-build-report-2026-05.md создан с разделами Окружение/Backend/Frontend/Несовместимости/Action items",
+        "Логи backend-pip.log, backend-check.log, backend-migrate.log, frontend-npm-ci.log, frontend-build.log закоммичены",
+        "Каждый упавший шаг сопровождён цитированием ошибки",
+        "Указан явный verdict 'ready / not ready / blockers' с обоснованием"
+      ]
+    },
+    {
+      "name": "audit-file-compat",
+      "type": "worker",
+      "openPR": true,
+      "scopedGoal": "Аудит совместимости файлов (артефактов и контрактов) между backend и frontend репозитория https://github.com/GureganHokex/apps-postavok.\n\nЧто проверить:\n1. API контракт: пройтись по `backend/parser_app/urls.py`, `backend/parser_app/views.py`, `backend/parser_app/auth_views.py`, `backend/parser_app/serializers.py`, и сверить с тем, что фронт реально дёргает в `frontend/src/api.js` и компонентах. Найти несоответствия путей, методов, полей, схем.\n2. Парсеры файлов: backend поддерживает PDF, Excel (.xls, .xlsx), Google Sheets через CSV, ZIP. Проверить, что фронтовый `react-dropzone` принимает корректные mime-типы / extensions и что бекенд их валидирует (`backend/parser_app/validators.py`, `parsers/`).\n3. Кодировки и форматы: проверить настройки времени и локали (Django LANGUAGE_CODE=ru-ru, TIME_ZONE=Europe/Moscow); фронт в этом плане; даты в JSON между фронтом и бэком (ISO?).\n4. Аутентификация: cookies/session между origin фронт vs бэк (`SESSION_COOKIE_SECURE`, `SESSION_COOKIE_SAMESITE`, `CSRF_COOKIE_SECURE` — отсутствуют в settings.py, под прод за HTTPS критично) и `withCredentials` в axios.\n5. Совместимость bundle-ов: frontend/build обслуживает три html (index, admin, taps) — сверить, что `frontend/public/index.html`, `admin.html`, `404.html` и `frontend/scripts/copy-taps-html.js` сходятся. Проверить, что nginx в `frontend/nginx.conf.template` правильно роутит `/admin` и `/taps` (есть `try_files $uri $uri/ /index.html` — но admin/taps это отдельные html).\n6. Экспорт заказов: backend генерирует PDF (reportlab) и Excel (openpyxl) — проверить, что фронт показывает кнопки экспорта только для тех форматов, которые backend реально умеет.\n7. CORS/CSRF: `CORS_ALLOWED_ORIGINS` vs реальные домены, на которых живёт фронт (gureganhokex.github.io, appspostavoktest.ru). Совпадают ли заголовки.\n8. Совместимость размеров: backend принимает upload без явного `DATA_UPLOAD_MAX_MEMORY_SIZE` / `FILE_UPLOAD_MAX_MEMORY_SIZE` — отметить как риск.\n\nИтог:\n- Создать `docs/audits/file-compat-audit-2026-05.md` с разделами: API contract diff, File-format support matrix (frontend ↔ backend), Auth/CSRF/Cookies, Static asset routing, CORS & origins, Upload limits, Production blockers, Recommendations.\n- Не менять код. Только репорт.",
+      "pathsAllowed": [
+        "docs/audits/**"
+      ],
+      "pathsForbidden": [
+        "backend/**",
+        "frontend/**",
+        ".github/**"
+      ],
+      "acceptance": [
+        "docs/audits/file-compat-audit-2026-05.md создан и закоммичен",
+        "Перечислены все API эндпоинты с указанием статуса 'used by frontend' / 'unused' / 'mismatch'",
+        "Раздел Static asset routing явно подтверждает или опровергает корректность отдачи admin.html и taps.html nginx'ом",
+        "Production blockers выделены отдельным разделом"
+      ]
+    },
+    {
+      "name": "aggregate-prod-readiness",
+      "type": "worker",
+      "openPR": true,
+      "dependsOn": [
+        "audit-env-config",
+        "audit-package-versions",
+        "audit-local-build",
+        "audit-file-compat"
+      ],
+      "scopedGoal": "Сводка четырёх audit-репортов в один single source of truth перед выкаткой в прод.\n\nКонтекст: четыре upstream worker'а сдали свои репорты в `docs/audits/*.md`. Их handoffs пастятся в твой prompt автоматически (см. orchestrate handoffs). Используй `## Notes`, `## Branch`, и тело каждого upstream-handoff'а как факты.\n\nЗадача:\n1. Прочитать четыре upstream handoff (env-config, packages, local-build, file-compat) и слить выводы в единый отчёт.\n2. Создать `docs/PROD_READINESS_2026-05.md` с разделами:\n   - TL;DR (один абзац: ready / ready with caveats / NOT ready)\n   - Production blockers (severity high — должны быть починены перед выкаткой)\n   - Risks (severity medium — должны быть в курсе)\n   - Nice-to-have (low)\n   - Action items (упорядочены по приоритету, с указанием owner-области: backend / frontend / ops)\n   - Ссылки на детальные репорты под `docs/audits/`.\n3. Не дублировать длинные таблицы из исходных репортов — ссылаться на них.\n4. В конце добавить чек-лист готовности к продaktу: env, deps, db, миграции, статика, healthcheck, secrets, HTTPS/cookies, nginx, CORS.\n\nНе трогай код и `docs/audits/*` — пиши только новый файл.",
+      "pathsAllowed": [
+        "docs/PROD_READINESS_2026-05.md"
+      ],
+      "pathsForbidden": [
+        "backend/**",
+        "frontend/**",
+        ".github/**",
+        "docs/audits/**"
+      ],
+      "acceptance": [
+        "docs/PROD_READINESS_2026-05.md создан и закоммичен",
+        "Содержит TL;DR с одним из вердиктов: ready / ready with caveats / NOT ready",
+        "Содержит разделы Blockers, Risks, Nice-to-have, Action items, Production checklist",
+        "Ссылается на каждый из четырёх upstream-репортов в docs/audits/"
+      ]
+    }
+  ]
+}

@@ -100,12 +100,32 @@ TEMPLATES = [
 WSGI_APPLICATION = 'beer_app.wsgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite3').lower()
+
+if DB_ENGINE in {'postgres', 'postgresql', 'psql'}:
+    db_options = {}
+    db_sslmode = os.getenv('DB_SSLMODE')
+    if db_sslmode:
+        db_options['sslmode'] = db_sslmode
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'apps_postavok'),
+            'USER': os.getenv('DB_USER', 'apps_postavok'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'apps_postavok'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': db_options,
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -214,6 +234,12 @@ LOGGING = {
 
 # Примечание: Интеграция с Untappd теперь использует веб-скрейпинг
 # API ключи больше не требуются
+
+# HTTPS/Proxy настройки для cloud deploy (Render/Vercel).
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
+    CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'true').lower() == 'true'
 
 # Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')

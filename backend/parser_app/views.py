@@ -639,6 +639,7 @@ class FileViewSet(viewsets.ModelViewSet):
 
 class SupplierViewSet(viewsets.ModelViewSet):
     """ViewSet для настроек поставщиков (маппинг колонок). Только админ."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
@@ -646,6 +647,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 class ParsedItemViewSet(viewsets.ModelViewSet):
     """ViewSet для работы с распарсенными позициями. Только админ."""
+    authentication_classes = [SessionAuthenticationNoCSRF]
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = ParsedItem.objects.all()
     serializer_class = ParsedItemSerializer
@@ -718,6 +720,7 @@ class ParsedItemViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     """ViewSet для работы с заказами. Список/просмотр — админ и бармен; создание и экспорт — только админ."""
     
+    authentication_classes = [SessionAuthenticationNoCSRF]
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
@@ -852,8 +855,11 @@ def upload_file(request):
 
 
 class TapLocationViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с локациями кранов. Просмотр — все авторизованные; создание/изменение/удаление/экспорт — админ."""
+    """ViewSet для работы с локациями кранов. Просмотр — все авторизованные; создание/изменение/удаление/экспорт — админ.
+    SessionAuthenticationNoCSRF — SPA с сессионной cookie не шлёт CSRF-заголовок (как у FileViewSet / users).
+    """
     
+    authentication_classes = [SessionAuthenticationNoCSRF]
     queryset = TapLocation.objects.prefetch_related('taps', 'available_beers')
 
     def get_permissions(self):
@@ -989,8 +995,11 @@ class TapLocationViewSet(viewsets.ModelViewSet):
 
 
 class TapViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с кранами. Пользователь может менять только is_visible; бармен и админ — все поля."""
+    """ViewSet для работы с кранами. Пользователь может менять только is_visible; бармен и админ — все поля.
+    SessionAuthenticationNoCSRF — см. TapLocationViewSet.
+    """
     
+    authentication_classes = [SessionAuthenticationNoCSRF]
     queryset = Tap.objects.select_related('location')
     serializer_class = TapSerializer
 
@@ -1144,8 +1153,11 @@ class TapViewSet(viewsets.ModelViewSet):
 
 
 class AvailableBeerViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с доступным пивом. Просмотр — все; создание/изменение — админ."""
+    """ViewSet для работы с доступным пивом. Просмотр — все; создание/изменение — админ.
+    SessionAuthenticationNoCSRF — см. TapLocationViewSet.
+    """
     
+    authentication_classes = [SessionAuthenticationNoCSRF]
     queryset = AvailableBeer.objects.select_related('location')
     serializer_class = AvailableBeerSerializer
 

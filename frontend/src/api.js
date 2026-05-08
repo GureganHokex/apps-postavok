@@ -14,12 +14,43 @@ const api = axios.create({
   },
 });
 
+const getApiErrorMessage = (error) => {
+  const data = error.response?.data;
+
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  if (data?.detail) {
+    return Array.isArray(data.detail) ? data.detail.join(' ') : data.detail;
+  }
+
+  if (data?.error) {
+    return Array.isArray(data.error) ? data.error.join(' ') : data.error;
+  }
+
+  if (data && typeof data === 'object') {
+    const firstError = Object.values(data).flat().find(Boolean);
+    if (firstError) {
+      return String(firstError);
+    }
+  }
+
+  if (error.response?.status === 403) {
+    return 'Нет прав на это действие. Проверьте роль пользователя или перезайдите в аккаунт.';
+  }
+
+  return error.message;
+};
+
 // Обработка ответов: 401 — не авторизован (приложение покажет форму входа)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       error.message = `Сервер недоступен. Запустите backend: cd backend && source venv/bin/activate && python manage.py runserver (или DJANGO_DEBUG=true для разработки).`;
+    } else if (error.response) {
+      error.message = getApiErrorMessage(error);
     }
     if (error.response?.status === 401) {
       window.dispatchEvent(new CustomEvent('api:unauthorized'));

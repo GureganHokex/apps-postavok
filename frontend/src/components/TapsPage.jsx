@@ -92,7 +92,12 @@ function TapsPage() {
       setIsAddingLocation(false);
       toast.success('Локация создана');
     } catch (err) {
-      toast.error('Ошибка создания локации');
+      const detail =
+        err.response?.data?.detail ||
+        (typeof err.response?.data === 'string' ? err.response.data : null) ||
+        err.response?.data?.error;
+      const msg = Array.isArray(detail) ? detail.map((d) => d || '').join(' ') : detail;
+      toast.error(msg ? `Ошибка создания локации: ${msg}` : 'Ошибка создания локации');
     }
   };
 
@@ -389,19 +394,22 @@ function TapsPage() {
               
               {canAddDeleteLocationsAndTaps && (isAddingLocation ? (
                 <div className="add-location-form">
-                  <input
-                    type="text"
-                    value={newLocationName}
-                    onChange={(e) => setNewLocationName(e.target.value)}
-                    placeholder="Название локации"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateLocation();
-                      if (e.key === 'Escape') setIsAddingLocation(false);
-                    }}
-                  />
-                  <button onClick={handleCreateLocation} className="btn-confirm">✓</button>
-                  <button onClick={() => setIsAddingLocation(false)} className="btn-cancel">×</button>
+                  <div className="add-location-form-row">
+                    <input
+                      type="text"
+                      value={newLocationName}
+                      onChange={(e) => setNewLocationName(e.target.value)}
+                      placeholder="Название локации"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateLocation();
+                        if (e.key === 'Escape') setIsAddingLocation(false);
+                      }}
+                    />
+                    <button type="button" onClick={handleCreateLocation} className="btn-confirm" title="Создать локацию">✓</button>
+                    <button type="button" onClick={() => setIsAddingLocation(false)} className="btn-cancel" title="Отмена">×</button>
+                  </div>
+                  <p className="add-location-hint">Нажмите ✓ или Enter — пока только текст в поле, локация не создана.</p>
                 </div>
               ) : (
                 <button

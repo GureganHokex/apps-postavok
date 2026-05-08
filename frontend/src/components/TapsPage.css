@@ -172,8 +172,23 @@
 
 .add-location-form {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.add-location-form-row {
+  display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.add-location-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--text-secondary);
+  max-width: 240px;
 }
 
 .add-location-form input {

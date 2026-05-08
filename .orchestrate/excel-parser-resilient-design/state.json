@@ -15,7 +15,7 @@
       "handoffPath": "handoffs/design-architecture.md",
       "startedAt": "2026-05-08T18:09:38.827Z",
       "finishedAt": "2026-05-08T18:18:46.972Z",
-      "lastUpdate": "2026-05-08T18:26:36.044Z",
+      "lastUpdate": "2026-05-08T18:26:37.122Z",
       "note": "respawned by self-planner (was error; attempts=1)",
       "attempts": 2,
       "slackTs": null,
@@ -38,14 +38,14 @@
       "resultStatus": "finished",
       "handoffPath": "handoffs/review-architecture.md",
       "startedAt": "2026-05-08T18:18:52.229Z",
-      "finishedAt": "2026-05-08T18:26:35.101Z",
-      "lastUpdate": "2026-05-08T18:26:35.102Z",
+      "finishedAt": "2026-05-08T18:26:35.108Z",
+      "lastUpdate": "2026-05-08T18:26:35.109Z",
       "note": null,
-      "attempts": 1,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": null
+      "verification": null,
+      "attempts": 1
     },
     {
       "name": "design-operations",
@@ -65,11 +65,11 @@
       "finishedAt": "2026-05-08T18:22:24.848Z",
       "lastUpdate": "2026-05-08T18:22:25.801Z",
       "note": null,
-      "attempts": 1,
       "slackTs": null,
       "prNumber": 5,
       "failureMode": null,
-      "verification": "not-verified"
+      "verification": "not-verified",
+      "attempts": 1
     },
     {
       "name": "aggregate-design",
@@ -86,9 +86,9 @@
       "status": "running",
       "resultStatus": null,
       "handoffPath": null,
-      "startedAt": "2026-05-08T18:26:36.051Z",
+      "startedAt": "2026-05-08T18:26:37.308Z",
       "finishedAt": null,
-      "lastUpdate": "2026-05-08T18:26:36.051Z",
+      "lastUpdate": "2026-05-08T18:26:37.308Z",
       "note": null,
       "slackTs": null,
       "prNumber": null,
@@ -119,7 +119,11 @@
       "message": "design-operations: verification self-reported (not-verified)"
     },
     {
-      "at": "2026-05-08T18:26:36.045Z",
+      "at": "2026-05-08T18:26:35.118Z",
+      "message": "git-sync failed (review-architecture running -> handed-off): Command failed: git -C /workspace/.orchestrate/excel-parser-resilient-design add /workspace/.orchestrate/excel-parser-resilient-design/state.json /workspace/.orchestrate/excel-parser-resilient-design/…"
+    },
+    {
+      "at": "2026-05-08T18:26:37.122Z",
       "message": "design-architecture: verification recorded (unit-test-verified) by verifier review-architecture"
     }
   ]

@@ -27,6 +27,8 @@ class ParsedItemValidator:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        self.error_details = []
+        self.warning_details = []
     
     def validate_item(self, item: Dict):
         """
@@ -40,6 +42,8 @@ class ParsedItemValidator:
         """
         self.errors = []
         self.warnings = []
+        self.error_details = []
+        self.warning_details = []
         
         # Валидация цены
         self._validate_price(item)
@@ -49,6 +53,9 @@ class ParsedItemValidator:
         
         # Валидация крепости (ABV)
         self._validate_abv(item)
+
+        # Валидация stock (если распознан как число)
+        self._validate_stock(item)
         
         # Валидация обязательных полей
         self._validate_required_fields(item)
@@ -58,6 +65,28 @@ class ParsedItemValidator:
         
         is_valid = len(self.errors) == 0
         return is_valid, self.errors, self.warnings
+
+    def _add_error(self, code: str, message: str, field_name: str):
+        self.errors.append(message)
+        self.error_details.append({
+            'code': code,
+            'message': message,
+            # Каноничное имя поля
+            'field_name': field_name,
+            # Legacy alias для обратной совместимости
+            'field': field_name,
+            'severity': 'error',
+        })
+
+    def _add_warning(self, code: str, message: str, field_name: str):
+        self.warnings.append(message)
+        self.warning_details.append({
+            'code': code,
+            'message': message,
+            'field_name': field_name,
+            'field': field_name,
+            'severity': 'warning',
+        })
     
     def _validate_price(self, item: Dict):
         """Валидация цены."""
@@ -69,13 +98,13 @@ class ParsedItemValidator:
             price_val = float(price)
             
             if price_val < self.MIN_PRICE:
-                self.errors.append(f"Цена отрицательная: {price_val} ₽")
+                self._add_error('price_negative', f"Цена отрицательная: {price_val} ₽", 'price')
             elif price_val > self.MAX_PRICE:
-                self.warnings.append(f"Цена подозрительно высокая: {price_val} ₽")
+                self._add_warning('price_high', f"Цена подозрительно высокая: {price_val} ₽", 'price')
             elif price_val == 0:
-                self.warnings.append("Цена равна нулю")
+                self._add_warning('price_zero', "Цена равна нулю", 'price')
         except (ValueError, TypeError):
-            self.errors.append(f"Некорректное значение цены: {price}")
+            self._add_error('price_invalid', f"Некорректное значение цены: {price}", 'price')
     
     def _validate_volume(self, item: Dict):
         """Валидация объёма."""
@@ -87,13 +116,13 @@ class ParsedItemValidator:
             volume_val = float(volume)
             
             if volume_val < self.MIN_VOLUME:
-                self.errors.append(f"Объём отрицательный: {volume_val} л")
+                self._add_error('volume_negative', f"Объём отрицательный: {volume_val} л", 'volume')
             elif volume_val > self.MAX_VOLUME:
-                self.warnings.append(f"Объём подозрительно большой: {volume_val} л")
+                self._add_warning('volume_high', f"Объём подозрительно большой: {volume_val} л", 'volume')
             elif volume_val == 0:
-                self.warnings.append("Объём равен нулю")
+                self._add_warning('volume_zero', "Объём равен нулю", 'volume')
         except (ValueError, TypeError):
-            self.errors.append(f"Некорректное значение объёма: {volume}")
+            self._add_error('volume_invalid', f"Некорректное значение объёма: {volume}", 'volume')
     
     def _validate_abv(self, item: Dict):
         """Валидация крепости (ABV)."""
@@ -105,13 +134,26 @@ class ParsedItemValidator:
             abv_val = float(abv)
             
             if abv_val < self.MIN_ABV:
-                self.errors.append(f"Крепость отрицательная: {abv_val}%")
+                self._add_error('abv_negative', f"Крепость отрицательная: {abv_val}%", 'abv')
             elif abv_val > self.MAX_ABV:
-                self.warnings.append(f"Крепость подозрительно высокая: {abv_val}%")
+                self._add_warning('abv_high', f"Крепость подозрительно высокая: {abv_val}%", 'abv')
             elif abv_val == 0:
-                self.warnings.append("Крепость равна нулю")
+                self._add_warning('abv_zero', "Крепость равна нулю", 'abv')
         except (ValueError, TypeError):
-            self.errors.append(f"Некорректное значение крепости: {abv}")
+            self._add_error('abv_invalid', f"Некорректное значение крепости: {abv}", 'abv')
+
+    def _validate_stock(self, item: Dict):
+        """Валидация stock, если значение числовое."""
+        stock = item.get('stock')
+        if stock is None or stock == '':
+            return
+        try:
+            stock_val = float(stock)
+            if stock_val < 0:
+                self._add_error('stock_negative', f"Остаток отрицательный: {stock_val}", 'stock')
+        except (ValueError, TypeError):
+            # Для нечисловых форматов (например "в наличии") ошибку не поднимаем.
+            return
     
     def _validate_required_fields(self, item: Dict):
         """Проверка наличия минимальных данных."""
@@ -119,11 +161,11 @@ class ParsedItemValidator:
         brewery = item.get('brewery', '').strip()
         
         if not beer_name and not brewery:
-            self.warnings.append("Отсутствует название пива и пивоварня")
+            self._add_warning('missing_beer_and_brewery', "Отсутствует название пива и пивоварня", 'beer_name')
         elif not beer_name:
-            self.warnings.append("Отсутствует название пива")
+            self._add_warning('missing_beer_name', "Отсутствует название пива", 'beer_name')
         elif not brewery:
-            self.warnings.append("Отсутствует пивоварня")
+            self._add_warning('missing_brewery', "Отсутствует пивоварня", 'brewery')
     
     def _check_suspicious_values(self, item: Dict):
         """Проверка на подозрительные значения."""
@@ -140,9 +182,17 @@ class ParsedItemValidator:
                     price_per_liter = price_val / volume_val
                     # Нормальный диапазон: 100-5000 руб/л
                     if price_per_liter < 50:
-                        self.warnings.append(f"Цена за литр подозрительно низкая: {price_per_liter:.2f} ₽/л")
+                        self._add_warning(
+                            'price_per_liter_low',
+                            f"Цена за литр подозрительно низкая: {price_per_liter:.2f} ₽/л",
+                            'price',
+                        )
                     elif price_per_liter > 10000:
-                        self.warnings.append(f"Цена за литр подозрительно высокая: {price_per_liter:.2f} ₽/л")
+                        self._add_warning(
+                            'price_per_liter_high',
+                            f"Цена за литр подозрительно высокая: {price_per_liter:.2f} ₽/л",
+                            'price',
+                        )
             except (ValueError, TypeError):
                 pass
     
@@ -178,6 +228,8 @@ class ParsedItemValidator:
                 'is_valid': is_valid,
                 'errors': errors,
                 'warnings': warnings,
+                'error_details': self.error_details.copy(),
+                'warning_details': self.warning_details.copy(),
                 'beer_name': item.get('beer_name', 'Не указано'),
                 'brewery': item.get('brewery', 'Не указано'),
             })

@@ -26,7 +26,7 @@
     {
       "name": "review-architecture",
       "type": "verifier",
-      "branch": "orch/excel-parser-resilient-design/review-architecture",
+      "branch": "`orch/excel-parser-resilient-design/design-architecture` (commit `00acd51` — review only adds `docs/design/excel-parser/_review/architecture-review.md`, не трогает артефакты worker'а)",
       "startingRef": "orch/excel-parser-resilient-design/design-architecture",
       "dependsOn": [
         "design-architecture"
@@ -34,18 +34,18 @@
       "agentId": "bc-3641eb7b-296f-4869-8cc9-e90b50c02464",
       "runId": "run-bbdf0468-1bd6-46d8-ac0c-e565b1f7640b",
       "parentAgentId": "bc-155206e2-411c-4b3e-adeb-64b259df9ff0",
-      "status": "running",
-      "resultStatus": null,
-      "handoffPath": null,
+      "status": "handed-off",
+      "resultStatus": "finished",
+      "handoffPath": "handoffs/review-architecture.md",
       "startedAt": "2026-05-08T18:18:52.229Z",
-      "finishedAt": null,
-      "lastUpdate": "2026-05-08T18:18:54.797Z",
+      "finishedAt": "2026-05-08T18:26:35.101Z",
+      "lastUpdate": "2026-05-08T18:26:35.102Z",
       "note": null,
+      "attempts": 1,
       "slackTs": null,
       "prNumber": null,
       "failureMode": null,
-      "verification": null,
-      "attempts": 1
+      "verification": null
     },
     {
       "name": "design-operations",
@@ -63,13 +63,13 @@
       "handoffPath": "handoffs/design-operations.md",
       "startedAt": "2026-05-08T18:18:54.798Z",
       "finishedAt": "2026-05-08T18:22:24.848Z",
-      "lastUpdate": "2026-05-08T18:22:24.848Z",
+      "lastUpdate": "2026-05-08T18:22:25.801Z",
       "note": null,
+      "attempts": 1,
       "slackTs": null,
       "prNumber": 5,
       "failureMode": null,
-      "verification": null,
-      "attempts": 1
+      "verification": "not-verified"
     },
     {
       "name": "aggregate-design",
@@ -112,6 +112,10 @@
     {
       "at": "2026-05-08T18:18:49.014Z",
       "message": "design-architecture: verification self-reported (type-check-only)"
+    },
+    {
+      "at": "2026-05-08T18:22:25.801Z",
+      "message": "design-operations: verification self-reported (not-verified)"
     }
   ]
 }

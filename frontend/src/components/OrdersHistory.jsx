@@ -25,7 +25,10 @@ function OrdersHistory() {
     staleTime: 30000, // 30 секунд
   });
 
-  const orders = ordersData?.results || ordersData || [];
+  const orders = useMemo(() => {
+    const raw = ordersData?.results ?? ordersData;
+    return Array.isArray(raw) ? raw : [];
+  }, [ordersData]);
 
   const handleDownload = useCallback(async (orderId) => {
     try {
@@ -104,11 +107,6 @@ function OrdersHistory() {
     enabled: isAdmin,
   });
   const stats = statsData || null;
-
-  const calculateTotalPrice = (order) => {
-    // Здесь нужно будет получать детали позиций для расчета
-    return 'N/A';
-  };
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {

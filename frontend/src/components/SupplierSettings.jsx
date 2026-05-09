@@ -3,7 +3,7 @@
  * Отдельная запись на каждого поставщика (Парадокс, CBD и т.д.).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../api';

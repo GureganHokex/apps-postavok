@@ -3,17 +3,16 @@
  */
 
 import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { getFileItems, updateItem, getFileSheets } from '../api';
+import { getFileItems, getFileSheets } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useTableSort } from '../hooks/useTableSort';
 import { useColumnSettings } from '../hooks/useColumnSettings';
 import { retry, handleApiError } from '../utils/errorHandler';
-import { columnConfig, getColumnLabel, isColumnSortable } from '../utils/columnConfig';
-import { getSettings, saveSettings } from '../utils/settings';
+import { columnConfig, isColumnSortable } from '../utils/columnConfig';
 import { SearchInput } from './SearchInput';
 import AdvancedSearch from './AdvancedSearch';
 import ExportButton from './ExportButton';
@@ -68,7 +67,7 @@ const ParsedTable = memo(function ParsedTable({
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, item: null });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
-  const [advancedSearchParams, setAdvancedSearchParams] = useState(null);
+  const [, setAdvancedSearchParams] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [groupBy, setGroupBy] = useState(null);

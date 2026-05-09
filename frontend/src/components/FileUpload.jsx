@@ -2,7 +2,7 @@
  * Компонент для загрузки файлов через drag&drop.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
@@ -21,7 +21,6 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
-  const [supplierInfo, setSupplierInfo] = useState(null);
   const progressIntervalRef = useRef(null);
 
   const onDrop = async (acceptedFiles) => {
@@ -58,7 +57,6 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
   };
 
   const handleSupplierConfirm = (info) => {
-    setSupplierInfo(info);
     setShowSupplierModal(false);
     if (pendingFile) {
       handleParse(pendingFile, info);

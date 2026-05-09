@@ -23,7 +23,6 @@ import './TapsPage.css';
 function TapsPage() {
   const { role, isAdmin } = useAuth();
   const canAddDeleteLocationsAndTaps = isAdmin;
-  const canEditTapsContent = isAdmin || role === 'bartender';
   const canOnlyChangeVisibility = role === 'user';
   const [locations, setLocations] = useState([]);
   const [activeLocationId, setActiveLocationId] = useState(null);
@@ -71,7 +70,7 @@ function TapsPage() {
 
   useEffect(() => {
     loadLocations();
-  }, []);
+  }, [loadLocations]);
 
   useEffect(() => {
     loadActiveLocation();
@@ -253,25 +252,6 @@ function TapsPage() {
       setDraggedBeer(null);
     } catch (err) {
       toast.error('Ошибка обновления');
-    }
-  };
-
-  // Очистка ячейки
-  const handleClearCell = async (tapId, field) => {
-    try {
-      if (field === 'current') {
-        await updateTap(tapId, {
-          brewery: '',
-          beer_name: '',
-          price_per_liter: null,
-          status: 'free',
-        });
-      } else {
-        await updateTap(tapId, { [field]: '' });
-      }
-      loadActiveLocation();
-    } catch (err) {
-      toast.error('Ошибка очистки');
     }
   };
 

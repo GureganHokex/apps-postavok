@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
-import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -84,7 +84,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
     };
 
     loadSelectedItems();
-  }, [selectedItems, fileId]);
+  }, [selectedItems, fileId, isKeg]);
 
   const [quantityErrors, setQuantityErrors] = useState({});
 

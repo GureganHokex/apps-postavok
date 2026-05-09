@@ -2,8 +2,8 @@
  * Компонент для работы с шаблонами заказов
  */
 
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import './OrderTemplates.css';
@@ -12,7 +12,6 @@ function OrderTemplates({ onApplyTemplate, currentItems, currentQuantities }) {
   const [templates, setTemplates] = useLocalStorage('order_templates', []);
   const [showModal, setShowModal] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [editingTemplate, setEditingTemplate] = useState(null);
 
   const handleSaveTemplate = () => {
     if (!templateName.trim()) {

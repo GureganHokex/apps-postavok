@@ -224,7 +224,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
 
   useEffect(() => {
     if (!allowedTabs.has(activeTab)) setActiveTab(isAdmin ? 'upload' : 'taps');
-  }, [allowedTabs, isAdmin]);
+  }, [allowedTabs, isAdmin, activeTab]);
 
   const setActiveTabSafe = useCallback((tab) => {
     setActiveTab((prev) => (allowedTabs.has(tab) ? tab : prev));

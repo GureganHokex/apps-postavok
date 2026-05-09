@@ -27,24 +27,26 @@ function SupplierTypeModal({ isOpen, fileName, onConfirm, onCancel }) {
       // Извлекаем возможные названия пивоварен из имени файла
       const commonBreweries = ['Dieta', 'Paradox', 'Red Rocket', 'Zero Point', 'Yaki-Da', 'Red Rocket Brewery'];
       const fileNameLower = fileName.toLowerCase();
-      
+      let detected = '';
+
       for (const brewery of commonBreweries) {
         if (fileNameLower.includes(brewery.toLowerCase())) {
+          detected = brewery;
           setAutoDetectedBrewery(brewery);
           setBreweryName(brewery);
           break;
         }
       }
-      
+
       // Если не найдено известное название, пробуем извлечь из имени файла
-      if (!autoDetectedBrewery) {
+      if (!detected) {
         // Убираем расширение файла
         const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
         // Пробуем найти слова с заглавной буквы
         const words = nameWithoutExt.split(/[\s_-]+/);
-        const possibleBrewery = words.find(word => 
-          word.length > 2 && 
-          word[0] === word[0].toUpperCase() && 
+        const possibleBrewery = words.find(word =>
+          word.length > 2 &&
+          word[0] === word[0].toUpperCase() &&
           /^[A-Za-zА-Яа-я]+$/.test(word)
         );
         if (possibleBrewery) {

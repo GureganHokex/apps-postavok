@@ -37,6 +37,15 @@ const api = axios.create({
   },
 });
 
+/**
+ * Отдельный клиент для multipart-загрузки: у `api` дефолт application/json.
+ * Иначе axios transformRequest при FormData превращает тело в JSON — DRF: «Неподдерживаемый тип… application/json».
+ */
+const uploadApi = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+});
+
 /** Длинный HTML вместо JSON — в UI показываем кратко. 502/504 чаще шлюз (Vercel→Render), не traceback Django. */
 function humanizeIfHtmlErrorBody(str, status) {
   if (typeof str !== 'string') return str;
@@ -166,21 +175,26 @@ function getNetworkErrorHint() {
   return `Не удаётся связаться с API (${API_BASE_URL}). Проверьте URL backend на Render и CORS (CORS_ALLOWED_ORIGINS).`;
 }
 
+function attachCommonResponseInterceptor(client) {
+  client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        error.message = getNetworkErrorHint();
+      } else if (error.response) {
+        error.message = getApiErrorMessage(error);
+      }
+      if (error.response?.status === 401) {
+        window.dispatchEvent(new CustomEvent('api:unauthorized'));
+      }
+      return Promise.reject(error);
+    }
+  );
+}
+
 // Обработка ответов: 401 — не авторизован (приложение покажет форму входа)
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      error.message = getNetworkErrorHint();
-    } else if (error.response) {
-      error.message = getApiErrorMessage(error);
-    }
-    if (error.response?.status === 401) {
-      window.dispatchEvent(new CustomEvent('api:unauthorized'));
-    }
-    return Promise.reject(error);
-  }
-);
+attachCommonResponseInterceptor(api);
+attachCommonResponseInterceptor(uploadApi);
 
 // ==================== Auth API ====================
 
@@ -250,9 +264,8 @@ export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  // Не задавать Content-Type вручную: без boundary multipart ломается / зависает на прокси.
-  // Axios подставит multipart/form-data с boundary для FormData.
-  const response = await api.post('/upload/', formData, {
+  // Только uploadApi: без дефолтного JSON — браузер выставит multipart + boundary.
+  const response = await uploadApi.post('/upload/', formData, {
     timeout: 600000, // 10 мин — большие xlsx через Vercel→Render
   });
 

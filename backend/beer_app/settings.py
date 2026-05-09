@@ -187,8 +187,16 @@ if DEBUG:
 else:
     _default_cors = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://gureganhokex.github.io"
     _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS", _default_cors)
-    CORS_ALLOWED_ORIGINS = [origin for origin in _cors_origins.split(",") if origin]
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(",") if origin.strip()]
     CORS_ALLOW_CREDENTIALS = True
+    # Preview и прод на Vercel (*-git-*.vercel.app и т.д.) — в env не перечислить все URL.
+    _cors_regex = os.getenv("CORS_ALLOWED_ORIGIN_REGEXES", "").strip()
+    if _cors_regex:
+        CORS_ALLOWED_ORIGIN_REGEXES = [p.strip() for p in _cors_regex.split(",") if p.strip()]
+    else:
+        CORS_ALLOWED_ORIGIN_REGEXES = [
+            r'^https://[\w.-]+\.vercel\.app$',
+        ]
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
 
 # Кэширование для прогресса парсинга.

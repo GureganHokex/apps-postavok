@@ -35,7 +35,47 @@ class OrderExporter:
             order: Объект заказа для экспорта
         """
         self.order = order
-    
+
+    @staticmethod
+    def _safe_row_num(location) -> Optional[int]:
+        """Номер строки в источнике; без int() при None — иначе 500 при экспорте."""
+        if not location:
+            return None
+        r = location.get('row')
+        if r is None:
+            return None
+        try:
+            return int(r)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _sheet_name_in_workbook(location, wb) -> Optional[str]:
+        """
+        Имя листа, как в файле xlsx. У brewery-парсера в JSON бывает sheet='Банки'|'Кеги',
+        а реальный лист — original_sheet ('Актуальный Прайс' и т.д.); иначе openpyxl не находит строку.
+        """
+        if not location or not wb.sheetnames:
+            return None
+        names = list(wb.sheetnames)
+        original = location.get('original_sheet')
+        explicit = location.get('sheet')
+        for candidate in (original, explicit):
+            if candidate and candidate in names:
+                return candidate
+
+        def norm(s):
+            return (s or '').strip().casefold()
+
+        for candidate in (original, explicit):
+            if not candidate:
+                continue
+            cn = norm(candidate)
+            for n in names:
+                if norm(n) == cn:
+                    return n
+        return names[0]
+
     def export(self) -> str:
         """
         Экспортирует заказ в выбранный формат.
@@ -102,11 +142,10 @@ class OrderExporter:
                 parsed_item = ParsedItem.objects.get(id=item_id)
                 location = parsed_item.raw_source_location
                 if location:
-                    sheet_name = location.get('sheet')
-                    row_num = location.get('row')
-                    if sheet_name and row_num is not None:
-                        # Сохраняем row_num как есть, excel_row вычислим позже с учетом header_row
-                        key = (sheet_name, row_num)
+                    ws_name = self._sheet_name_in_workbook(location, wb)
+                    row_num = self._safe_row_num(location)
+                    if ws_name is not None and row_num is not None:
+                        key = (ws_name, row_num)
                         order_items_dict[key] = quantity
             except ParsedItem.DoesNotExist:
                 continue
@@ -262,30 +301,33 @@ class OrderExporter:
                 try:
                     parsed_item = ParsedItem.objects.get(id=item_id)
                     location = parsed_item.raw_source_location
-                    if location and location.get('sheet') == sheet_name:
-                        row_num = location.get('row')
-                        excel_row = row_num + 2
-                        
-                        if excel_row <= ws_check.max_row:
-                            cell_check = ws_check.cell(row=excel_row, column=order_col_idx)
-                            # Сравниваем значения, преобразуя в числа для надежности
-                            cell_value = cell_check.value
-                            if cell_value is not None:
-                                try:
-                                    cell_value = float(cell_value)
-                                except (ValueError, TypeError):
-                                    pass
-                            
+                    if not location or self._sheet_name_in_workbook(location, wb) != sheet_name:
+                        continue
+                    row_num = self._safe_row_num(location)
+                    if row_num is None:
+                        continue
+                    excel_row = row_num + 2
+
+                    if excel_row <= ws_check.max_row:
+                        cell_check = ws_check.cell(row=excel_row, column=order_col_idx)
+                        # Сравниваем значения, преобразуя в числа для надежности
+                        cell_value = cell_check.value
+                        if cell_value is not None:
                             try:
-                                quantity_float = float(quantity)
+                                cell_value = float(cell_value)
                             except (ValueError, TypeError):
-                                quantity_float = quantity
-                            
-                            if cell_value != quantity_float:
-                                # Очищаем формулу, если она есть
-                                if cell_check.data_type == 'f':
-                                    cell_check.value = None
-                                ws_check.cell(row=excel_row, column=order_col_idx, value=quantity)
+                                pass
+
+                        try:
+                            quantity_float = float(quantity)
+                        except (ValueError, TypeError):
+                            quantity_float = quantity
+
+                        if cell_value != quantity_float:
+                            # Очищаем формулу, если она есть
+                            if cell_check.data_type == 'f':
+                                cell_check.value = None
+                            ws_check.cell(row=excel_row, column=order_col_idx, value=quantity)
                 except ParsedItem.DoesNotExist:
                     continue
         
@@ -306,46 +348,49 @@ class OrderExporter:
                 try:
                     parsed_item = ParsedItem.objects.get(id=item_id)
                     location = parsed_item.raw_source_location
-                    if location and location.get('sheet') == sheet_name:
-                        row_num = location.get('row')
-                        excel_row = row_num + 2
-                        
-                        if excel_row <= ws_final.max_row:
-                            cell_final = ws_final.cell(row=excel_row, column=order_col_idx)
-                            # Сравниваем значения, преобразуя в числа для надежности
-                            cell_value = cell_final.value
-                            if cell_value is not None:
-                                try:
-                                    cell_value = float(cell_value)
-                                except (ValueError, TypeError):
-                                    pass
-                            
+                    if not location or self._sheet_name_in_workbook(location, wb) != sheet_name:
+                        continue
+                    row_num = self._safe_row_num(location)
+                    if row_num is None:
+                        continue
+                    excel_row = row_num + 2
+
+                    if excel_row <= ws_final.max_row:
+                        cell_final = ws_final.cell(row=excel_row, column=order_col_idx)
+                        # Сравниваем значения, преобразуя в числа для надежности
+                        cell_value = cell_final.value
+                        if cell_value is not None:
                             try:
-                                quantity_float = float(quantity)
+                                cell_value = float(cell_value)
                             except (ValueError, TypeError):
-                                quantity_float = quantity
-                            
-                            # Формируем значение с указанием формата
-                            format_type = parsed_item.format_type or ''
-                            if format_type:
-                                # Сокращаем название формата
-                                format_short = format_type.lower()
-                                if 'кег' in format_short or 'keg' in format_short:
-                                    format_label = 'кег'
-                                elif 'банк' in format_short or 'can' in format_short:
-                                    format_label = 'банка'
-                                elif 'бут' in format_short or 'bottle' in format_short:
-                                    format_label = 'бут'
-                                else:
-                                    format_label = format_type[:10]
-                                order_value = f"{quantity} {format_label}"
+                                pass
+
+                        try:
+                            quantity_float = float(quantity)
+                        except (ValueError, TypeError):
+                            quantity_float = quantity
+
+                        # Формируем значение с указанием формата
+                        format_type = parsed_item.format_type or ''
+                        if format_type:
+                            # Сокращаем название формата
+                            format_short = format_type.lower()
+                            if 'кег' in format_short or 'keg' in format_short:
+                                format_label = 'кег'
+                            elif 'банк' in format_short or 'can' in format_short:
+                                format_label = 'банка'
+                            elif 'бут' in format_short or 'bottle' in format_short:
+                                format_label = 'бут'
                             else:
-                                order_value = quantity
-                            
-                            # Если значение неверное, исправляем
-                            if cell_final.data_type == 'f':
-                                cell_final.value = None
-                            ws_final.cell(row=excel_row, column=order_col_idx, value=order_value)
+                                format_label = format_type[:10]
+                            order_value = f"{quantity} {format_label}"
+                        else:
+                            order_value = quantity
+
+                        # Если значение неверное, исправляем
+                        if cell_final.data_type == 'f':
+                            cell_final.value = None
+                        ws_final.cell(row=excel_row, column=order_col_idx, value=order_value)
                 except ParsedItem.DoesNotExist:
                     continue
         

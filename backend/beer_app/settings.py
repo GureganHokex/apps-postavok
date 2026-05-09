@@ -191,13 +191,23 @@ else:
     CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
 
-# Кэширование для прогресса парсинга
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+# Кэширование для прогресса парсинга.
+# LocMem не разделяется между процессами Gunicorn → на Render poll /parse_progress/ часто
+# попадает на другой воркер и видит «not_started». В production используем БД (тот же Postgres).
+if DEBUG:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+            'LOCATION': 'parse_progress_cache',
+        }
+    }
 
 # Logging configuration
 LOGGING = {

@@ -11,5 +11,13 @@ if [ -n "${ADMIN_PASSWORD:-}" ]; then
 fi
 python manage.py collectstatic --noinput
 
-# Стартуем gunicorn
-exec gunicorn beer_app.wsgi:application --bind "0.0.0.0:${PORT:-8000}" --workers 3
+# Gunicorn: на Render Free памяти мало — несколько воркеров + тяжёлый pandas/openpyxl часто дают
+# SIGKILL (OOM). По умолчанию 1 воркер; при апгрейде плана выставь GUNICORN_WORKERS=2–3.
+# Таймаут большой: парсинг большого Excel может идти минутами.
+exec gunicorn beer_app.wsgi:application \
+  --bind "0.0.0.0:${PORT:-8000}" \
+  --workers "${GUNICORN_WORKERS:-1}" \
+  --timeout "${GUNICORN_TIMEOUT:-1200}" \
+  --graceful-timeout 120 \
+  --max-requests 200 \
+  --max-requests-jitter 50

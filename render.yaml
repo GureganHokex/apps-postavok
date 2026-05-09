@@ -42,3 +42,8 @@ services:
         value: "false"
       - key: PARSER_LEGACY_FORCE
         value: "false"
+      # Free tier: один воркер = меньше OOM при парсинге; на платном плане можно 2–3.
+      - key: GUNICORN_WORKERS
+        value: "1"
+      - key: GUNICORN_TIMEOUT
+        value: "1200"

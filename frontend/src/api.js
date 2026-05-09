@@ -249,14 +249,13 @@ export const deleteUser = async (id) => {
 export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  
-  // Используем эндпоинт /api/upload/
+
+  // Не задавать Content-Type вручную: без boundary multipart ломается / зависает на прокси.
+  // Axios подставит multipart/form-data с boundary для FormData.
   const response = await api.post('/upload/', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+    timeout: 600000, // 10 мин — большие xlsx через Vercel→Render
   });
-  
+
   return response.data;
 };
 

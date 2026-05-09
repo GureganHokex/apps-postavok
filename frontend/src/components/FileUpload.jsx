@@ -6,7 +6,14 @@ import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
-import { uploadFile, parseFile, getFileItems, getFileMetadata, getParseProgress } from '../api';
+import {
+  uploadFile,
+  parseFile,
+  getFileItems,
+  getFileMetadata,
+  getParseProgress,
+  getApiErrorMessage,
+} from '../api';
 import { ParseProgress } from './ParseProgress';
 import SupplierTypeModal from './SupplierTypeModal';
 import './FileUpload.css';
@@ -49,7 +56,7 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
           setShowSupplierModal(true);
         }
       } catch (err) {
-        const errorMsg = `Ошибка загрузки файла ${file.name}: ${err.message}`;
+        const errorMsg = `Ошибка загрузки файла ${file.name}: ${getApiErrorMessage(err)}`;
         toast.error(errorMsg);
         setError(errorMsg);
       } finally {

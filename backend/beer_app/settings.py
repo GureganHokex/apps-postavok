@@ -255,6 +255,8 @@ LOGGING = {
 
 # HTTPS/Proxy настройки для cloud deploy (Render/Vercel).
 if not DEBUG:
+    # Render / reverse-proxy: корректный Host (и cookie) при прокси (например Vercel → Render).
+    USE_X_FORWARDED_HOST = os.getenv('USE_X_FORWARDED_HOST', 'true').lower() == 'true'
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
     CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'true').lower() == 'true'

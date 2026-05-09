@@ -4,7 +4,30 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+/**
+ * База API: локально — env или localhost; в проде — тот же origin + /api (rewrites в vercel.json → Render).
+ * Прямой URL на onrender.com из браузера часто даёт ERR_NETWORK (блокировки, DNS, cold start).
+ * Обход: REACT_APP_FORCE_API_URL=1 и REACT_APP_API_URL=https://.../api — только если осознанно нужен прямой вызов.
+ */
+function resolveApiBaseUrl() {
+  const fromEnv = (process.env.REACT_APP_API_URL || '').trim().replace(/\/$/, '');
+  const forceDirect =
+    process.env.REACT_APP_FORCE_API_URL === '1' || process.env.REACT_APP_FORCE_API_URL === 'true';
+
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return fromEnv || 'http://localhost:8000/api';
+    }
+    if (forceDirect && fromEnv) {
+      return fromEnv;
+    }
+    return `${window.location.origin}/api`;
+  }
+  return fromEnv || 'http://localhost:8000/api';
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,7 +70,7 @@ function getNetworkErrorHint() {
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
   const isLocalPage = /^localhost$|^127\.0\.0\.1$/i.test(host);
   const apiPointsToLocal = /localhost|127\.0\.0\.1/.test(API_BASE_URL);
-  if (!isLocalPage && apiPointsToLocal) {
+  if (!isLocalPage && apiPointsToLocal && !/\.vercel\.app$/i.test(host)) {
     return (
       'В продакшене не задан REACT_APP_API_URL: запросы уходят на localhost. ' +
       'В Vercel → Project → Settings → Environment Variables добавьте REACT_APP_API_URL=https://<ваш-backend>.onrender.com/api ' +
@@ -58,6 +81,15 @@ function getNetworkErrorHint() {
     return (
       'Сервер недоступен. Локально: cd backend && source venv/bin/activate && python manage.py runserver ' +
       '(или задайте REACT_APP_API_URL в .env в корне репозитория).'
+    );
+  }
+  const sameOrigin =
+    typeof window !== 'undefined' && API_BASE_URL.startsWith(`${window.location.origin}/`);
+  if (sameOrigin) {
+    return (
+      `Не удаётся связаться с API (${API_BASE_URL}). ` +
+      'Запрос идёт через ваш домен (rewrite на Render): убедитесь, что backend на Render в состоянии Live, ' +
+      'а destination в frontend/vercel.json совпадает с актуальным URL сервиса.'
     );
   }
   return `Не удаётся связаться с API (${API_BASE_URL}). Проверьте URL backend на Render и CORS (CORS_ALLOWED_ORIGINS).`;

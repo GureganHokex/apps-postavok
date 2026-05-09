@@ -43,12 +43,32 @@ const getApiErrorMessage = (error) => {
   return error.message;
 };
 
+function getNetworkErrorHint() {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalPage = /^localhost$|^127\.0\.0\.1$/i.test(host);
+  const apiPointsToLocal = /localhost|127\.0\.0\.1/.test(API_BASE_URL);
+  if (!isLocalPage && apiPointsToLocal) {
+    return (
+      'В продакшене не задан REACT_APP_API_URL: запросы уходят на localhost. ' +
+      'В Vercel → Project → Settings → Environment Variables добавьте REACT_APP_API_URL=https://<ваш-backend>.onrender.com/api ' +
+      '(Production + Preview при необходимости) и выполните Redeploy с очисткой кэша.'
+    );
+  }
+  if (isLocalPage) {
+    return (
+      'Сервер недоступен. Локально: cd backend && source venv/bin/activate && python manage.py runserver ' +
+      '(или задайте REACT_APP_API_URL в .env в корне репозитория).'
+    );
+  }
+  return `Не удаётся связаться с API (${API_BASE_URL}). Проверьте URL backend на Render и CORS (CORS_ALLOWED_ORIGINS).`;
+}
+
 // Обработка ответов: 401 — не авторизован (приложение покажет форму входа)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      error.message = `Сервер недоступен. Запустите backend: cd backend && source venv/bin/activate && python manage.py runserver (или DJANGO_DEBUG=true для разработки).`;
+      error.message = getNetworkErrorHint();
     } else if (error.response) {
       error.message = getApiErrorMessage(error);
     }

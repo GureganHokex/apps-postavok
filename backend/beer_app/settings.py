@@ -44,10 +44,17 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
 
 # Разрешённые хосты и доверенные источники
+# strip() важен: в env после запятой часто пробел («.onrender.com, .vercel.app») — иначе « .vercel.app»
+# не матчится и DisallowedHost для apps-postavok.vercel.app при USE_X_FORWARDED_HOST / прокси.
 ALLOWED_HOSTS = [
-    host for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-    if host
+    host.strip()
+    for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
 ]
+if not DEBUG:
+    for _suffix in ('.onrender.com', '.vercel.app'):
+        if _suffix not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_suffix)
 # Для запросов с фронта (например localhost:3000) при пустом env задаём доверенные источники для разработки
 _default_csrf_origins = os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS') or 'http://localhost:3000,http://127.0.0.1:3000'
 CSRF_TRUSTED_ORIGINS = [

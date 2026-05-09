@@ -240,6 +240,9 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'true').lower() == 'true'
     CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'true').lower() == 'true'
+    # Фронт на другом origin (Vercel) + API на Render: иначе браузер не пришлёт sessionid на XHR.
+    SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'None')
+    CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'None')
 
 # Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')

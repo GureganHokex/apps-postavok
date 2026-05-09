@@ -37,6 +37,20 @@ const api = axios.create({
   },
 });
 
+/** Django при DEBUG=false отдаёт HTML-страницу 500; в UI показываем кратко, а не весь документ. */
+function humanizeIfHtmlErrorBody(str, status) {
+  if (typeof str !== 'string') return str;
+  const t = str.trim();
+  if (/^<!doctype html|^<html[\s>]/i.test(t)) {
+    const code = status ?? 500;
+    return (
+      `Сервер вернул ошибку (${code}), тело ответа — HTML (типично для Django при сбое), а не JSON. ` +
+      'Откройте логи веб-сервиса на Render (Logs) — там будет traceback и точная причина.'
+    );
+  }
+  return str;
+}
+
 /**
  * Любое поле ошибки API → строка для UI (React не может рендерить объект как текст; DRF/Vercel шлют { code, message }).
  */
@@ -72,7 +86,7 @@ export function getApiErrorMessage(error) {
   const data = error.response?.data;
 
   if (typeof data === 'string') {
-    return data;
+    return humanizeIfHtmlErrorBody(data, error.response?.status);
   }
 
   if (data?.detail != null) {
@@ -97,7 +111,8 @@ export function getApiErrorMessage(error) {
     return 'Нет прав на это действие. Проверьте роль пользователя или перезайдите в аккаунт.';
   }
 
-  return stringifyApiValue(error.message) || 'Ошибка запроса';
+  const fallback = stringifyApiValue(error.message) || 'Ошибка запроса';
+  return humanizeIfHtmlErrorBody(fallback, error.response?.status);
 }
 
 function getNetworkErrorHint() {

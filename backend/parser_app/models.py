@@ -2,10 +2,15 @@
 Модели данных для приложения парсинга прайсов.
 """
 
-from django.conf import settings
-from django.db import models
-from django.core.validators import MinValueValidator
 import json
+import logging
+
+from django.conf import settings
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.db.models import CharField
+
+logger = logging.getLogger(__name__)
 
 
 class UserProfile(models.Model):
@@ -363,6 +368,25 @@ class ParsedItem(models.Model):
         verbose_name = 'Распарсенная позиция'
         verbose_name_plural = 'Распарсенные позиции'
         ordering = ['file', 'brewery', 'beer_name']
+
+    def truncate_varchar_fields(self):
+        """Подрезает CharField под max_length (прайсы часто дают длиннее лимита БД)."""
+        for field in self._meta.concrete_fields:
+            if isinstance(field, CharField) and field.max_length:
+                val = getattr(self, field.attname)
+                if isinstance(val, str) and len(val) > field.max_length:
+                    logger.debug(
+                        'Усечение %s с %s до %s символов (file_id=%s)',
+                        field.name,
+                        len(val),
+                        field.max_length,
+                        self.file_id,
+                    )
+                    setattr(self, field.attname, val[: field.max_length])
+
+    def save(self, *args, **kwargs):
+        self.truncate_varchar_fields()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.brewery} - {self.beer_name}"

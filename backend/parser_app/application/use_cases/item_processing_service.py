@@ -481,7 +481,9 @@ class ItemProcessingService:
                     k: v for k, v in item_data.items()
                     if k in [f.name for f in ParsedItem._meta.get_fields()]
                 }
-                items_to_create.append(ParsedItem(**cleaned_data))
+                row = ParsedItem(**cleaned_data)
+                row.truncate_varchar_fields()
+                items_to_create.append(row)
             except Exception as e:
                 logger.error(f"Ошибка при создании ParsedItem: {str(e)}, данные: {item_data}")
                 continue

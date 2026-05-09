@@ -21,6 +21,7 @@ import StatisticsDashboard from './components/StatisticsDashboard';
 import TapsPage from './components/TapsPage';
 import SupplierSettings from './components/SupplierSettings';
 import ErrorBoundary from './components/ErrorBoundary';
+import { getApiErrorMessage } from './api';
 import './App.css';
 
 function getPageType() {
@@ -46,8 +47,7 @@ function AdminGate() {
         setLoginError('Доступ только для администратора.');
       }
     } catch (err) {
-      const msg = err.response?.data?.error ?? err.response?.data?.detail ?? (err.response ? `${err.response.status}: ${err.response.statusText}` : err.message);
-      setLoginError(msg || 'Ошибка входа');
+      setLoginError(getApiErrorMessage(err) || 'Ошибка входа');
     } finally {
       setSubmitting(false);
     }
@@ -92,8 +92,7 @@ function MainGate() {
     try {
       await login(username, password);
     } catch (err) {
-      const msg = err.response?.data?.error ?? err.response?.data?.detail ?? (err.response ? `${err.response.status}: ${err.response.statusText}` : err.message);
-      setLoginError(msg || 'Ошибка входа');
+      setLoginError(getApiErrorMessage(err) || 'Ошибка входа');
     } finally {
       setSubmitting(false);
     }

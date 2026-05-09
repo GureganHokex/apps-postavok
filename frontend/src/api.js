@@ -37,34 +37,68 @@ const api = axios.create({
   },
 });
 
-const getApiErrorMessage = (error) => {
+/**
+ * Любое поле ошибки API → строка для UI (React не может рендерить объект как текст; DRF/Vercel шлют { code, message }).
+ */
+function stringifyApiValue(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const parts = value.map(stringifyApiValue).filter(Boolean);
+    return parts.length ? parts.join(' ') : '';
+  }
+  if (typeof value === 'object') {
+    if (typeof value.message === 'string') {
+      const code = typeof value.code === 'string' ? `${value.code}: ` : '';
+      return code + value.message;
+    }
+    if (typeof value.string === 'string') return value.string;
+    if (value.detail != null) return stringifyApiValue(value.detail);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'Ошибка сервера';
+    }
+  }
+  return String(value);
+}
+
+/** Для форм/toast: любое значение из API → строка (не рендерить объект в React). */
+export { stringifyApiValue as formatApiFieldForUi };
+
+/** Сообщение об ошибке запроса — всегда строка (для toast, форм, error.message в axios). */
+export function getApiErrorMessage(error) {
   const data = error.response?.data;
 
   if (typeof data === 'string') {
     return data;
   }
 
-  if (data?.detail) {
-    return Array.isArray(data.detail) ? data.detail.join(' ') : data.detail;
+  if (data?.detail != null) {
+    const s = stringifyApiValue(data.detail);
+    if (s) return s;
   }
 
-  if (data?.error) {
-    return Array.isArray(data.error) ? data.error.join(' ') : data.error;
+  if (data?.error != null) {
+    const s = stringifyApiValue(data.error);
+    if (s) return s;
   }
 
   if (data && typeof data === 'object') {
-    const firstError = Object.values(data).flat().find(Boolean);
-    if (firstError) {
-      return String(firstError);
-    }
+    const parts = Object.values(data)
+      .flat(4)
+      .map(stringifyApiValue)
+      .filter(Boolean);
+    if (parts.length) return parts.join(' ');
   }
 
   if (error.response?.status === 403) {
     return 'Нет прав на это действие. Проверьте роль пользователя или перезайдите в аккаунт.';
   }
 
-  return error.message;
-};
+  return stringifyApiValue(error.message) || 'Ошибка запроса';
+}
 
 function getNetworkErrorHint() {
   const host = typeof window !== 'undefined' ? window.location.hostname : '';

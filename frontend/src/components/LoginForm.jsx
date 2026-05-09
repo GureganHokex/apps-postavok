@@ -2,6 +2,7 @@
  * Форма входа: логин и пароль.
  */
 import React, { useState } from 'react';
+import { formatApiFieldForUi } from '../api';
 import './LoginForm.css';
 
 export default function LoginForm({ onSubmit, error, loading, title = 'Вход' }) {
@@ -17,7 +18,11 @@ export default function LoginForm({ onSubmit, error, loading, title = 'Вход'
     <div className="login-form-wrap">
       <form className="login-form" onSubmit={handleSubmit}>
         <h2>{title}</h2>
-        {error && <div className="login-form-error">{error}</div>}
+        {error != null && error !== '' && (
+          <div className="login-form-error">
+            {typeof error === 'string' ? error : formatApiFieldForUi(error)}
+          </div>
+        )}
         <label>
           Логин
           <input

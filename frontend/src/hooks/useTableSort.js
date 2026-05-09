@@ -8,9 +8,10 @@ export function useTableSort(data, defaultSort = null) {
   const [sortConfig, setSortConfig] = useState(defaultSort);
 
   const sortedData = useMemo(() => {
-    if (!sortConfig) return data;
+    const rows = Array.isArray(data) ? data : [];
+    if (!sortConfig) return rows;
 
-    return [...data].sort((a, b) => {
+    return [...rows].sort((a, b) => {
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
 

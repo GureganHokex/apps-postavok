@@ -30,6 +30,15 @@
   margin-bottom: 1.5rem;
 }
 
+.error-boundary-hint {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #212529);
+  word-break: break-word;
+  margin-top: -0.75rem;
+  margin-bottom: 1.25rem;
+}
+
 .error-details {
   text-align: left;
   margin: 1.5rem 0;

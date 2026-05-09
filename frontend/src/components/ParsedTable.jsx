@@ -81,20 +81,23 @@ const ParsedTable = memo(function ParsedTable({
   // Сортировка таблицы
   const { sortedData, sortConfig, handleSort } = useTableSort(items);
   
-  // Настройки колонок
-  const defaultColumns = [
-    { key: 'brewery', label: 'Пивоварня' },
-    { key: 'beer_name', label: 'Название' },
-    { key: 'style', label: 'Стиль' },
-    { key: 'abv', label: 'ABV' },
-    { key: 'ibu', label: 'IBU' },
-    { key: 'price', label: 'Цена' },
-    { key: 'currency', label: 'Валюта' },
-    { key: 'volume', label: 'Объем' },
-    { key: 'format_type', label: 'Формат' },
-    { key: 'stock', label: 'Остаток' },
-    { key: 'description', label: 'Описание' },
-  ];
+  // Настройки колонок (стабильная ссылка — иначе useColumnSettings/effect от родителя дергаются каждый рендер)
+  const defaultColumns = useMemo(
+    () => [
+      { key: 'brewery', label: 'Пивоварня' },
+      { key: 'beer_name', label: 'Название' },
+      { key: 'style', label: 'Стиль' },
+      { key: 'abv', label: 'ABV' },
+      { key: 'ibu', label: 'IBU' },
+      { key: 'price', label: 'Цена' },
+      { key: 'currency', label: 'Валюта' },
+      { key: 'volume', label: 'Объем' },
+      { key: 'format_type', label: 'Формат' },
+      { key: 'stock', label: 'Остаток' },
+      { key: 'description', label: 'Описание' },
+    ],
+    []
+  );
   const { columns, visibleColumns, toggleColumnVisibility, reorderColumns, resetColumns, getVisibleColumns } = useColumnSettings(defaultColumns);
   
   // Сохраняем фильтры при изменении

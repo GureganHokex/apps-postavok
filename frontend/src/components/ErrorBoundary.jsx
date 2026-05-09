@@ -39,6 +39,11 @@ class ErrorBoundary extends React.Component {
             <div className="error-icon">⚠️</div>
             <h2>Что-то пошло не так</h2>
             <p>Произошла ошибка при отображении компонента.</p>
+            {this.state.error && (
+              <p className="error-boundary-hint">
+                {String(this.state.error.message || this.state.error).slice(0, 400)}
+              </p>
+            )}
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="error-details">
                 <summary>Детали ошибки (только в режиме разработки)</summary>

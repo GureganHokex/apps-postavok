@@ -7,7 +7,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Routes, Route, NavLink, Navigate, Outlet } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from './contexts/AuthContext';
 import LoginForm from './components/LoginForm';
 import AdminPanel from './components/AdminPanel';
@@ -197,8 +197,8 @@ const queryClient = new QueryClient({
       retry: 2,
       retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       staleTime: 10 * 60 * 1000, // 10 минут
-      cacheTime: 30 * 60 * 1000, // 30 минут
-      keepPreviousData: true, // Сохраняем предыдущие данные при загрузке новых
+      gcTime: 30 * 60 * 1000, // v5: время в кэше неактивных запросов (раньше cacheTime)
+      placeholderData: keepPreviousData,
     },
     mutations: {
       retry: 1,
@@ -217,7 +217,9 @@ function AppContent({ fullAccess = false, role = 'user' }) {
   const [selectedItems, setSelectedItems] = useState([]);
 
   const allowedTabs = useMemo(() => {
-    if (fullAccess || role === 'admin') return new Set(['upload', 'items', 'metadata', 'order', 'statistics', 'orders-history', 'taps', 'suppliers']);
+    if (fullAccess || role === 'admin') {
+      return new Set(['upload', 'parse', 'items', 'metadata', 'order', 'statistics', 'orders-history', 'taps', 'suppliers']);
+    }
     if (role === 'bartender') return new Set(['taps', 'orders-history']);
     return new Set(['taps']);
   }, [fullAccess, role]);

@@ -8,14 +8,15 @@ import './TableGrouping.css';
 
 export function useTableGrouping(data, groupBy) {
   const groupedData = useMemo(() => {
-    if (!groupBy || !data || data.length === 0) {
-      return { groups: [], ungrouped: data };
+    const rows = Array.isArray(data) ? data : [];
+    if (!groupBy || rows.length === 0) {
+      return { groups: [], ungrouped: rows };
     }
 
     const groups = {};
     const ungrouped = [];
 
-    data.forEach(item => {
+    rows.forEach(item => {
       const groupValue = item[groupBy];
       if (groupValue && groupValue !== '-' && groupValue !== '') {
         if (!groups[groupValue]) {

@@ -37,18 +37,28 @@ const api = axios.create({
   },
 });
 
-/** Django при DEBUG=false отдаёт HTML-страницу 500; в UI показываем кратко, а не весь документ. */
+/** Длинный HTML вместо JSON — в UI показываем кратко. 502/504 чаще шлюз (Vercel→Render), не traceback Django. */
 function humanizeIfHtmlErrorBody(str, status) {
   if (typeof str !== 'string') return str;
   const t = str.trim();
-  if (/^<!doctype html|^<html[\s>]/i.test(t)) {
-    const code = status ?? 500;
+  if (!/^<!doctype html|^<html[\s>]/i.test(t)) return str;
+  const code = status ?? 500;
+  if (code === 502 || code === 503) {
     return (
-      `Сервер вернул ошибку (${code}), тело ответа — HTML (типично для Django при сбое), а не JSON. ` +
-      'Откройте логи веб-сервиса на Render (Logs) — там будет traceback и точная причина.'
+      `Ошибка шлюза (${code}): ответ пришёл как HTML-заглушка прокси, а не JSON. ` +
+      'Обычно это краткий сбой или таймаут между Vercel и Render при долгом запросе — повторите; если парсинг на сервере уже прошёл, обновите страницу и откройте вкладку «Позиции». Логи: Render → Logs.'
     );
   }
-  return str;
+  if (code === 504) {
+    return (
+      `Таймаут шлюза (${code}): прокси не дождался ответа от backend. ` +
+      'При долгом парсе данные на Render могут уже сохраниться — обновите страницу. Логи: Render → Logs.'
+    );
+  }
+  return (
+    `Сервер вернул ошибку (${code}), тело ответа — HTML (часто страница ошибки Django), а не JSON. ` +
+    'Откройте логи веб-сервиса на Render (Logs) — там traceback и причина.'
+  );
 }
 
 /**
@@ -83,10 +93,22 @@ export { stringifyApiValue as formatApiFieldForUi };
 
 /** Сообщение об ошибке запроса — всегда строка (для toast, форм, error.message в axios). */
 export function getApiErrorMessage(error) {
+  const status = error.response?.status;
   const data = error.response?.data;
 
+  // 502/503/504 без HTML-тела — всё равно типичный «шлюз», не тело DRF
+  if (status === 502 || status === 503 || status === 504) {
+    const raw = typeof data === 'string' ? data.trim() : '';
+    const isHtml = /^<!doctype html|^<html/i.test(raw);
+    if (!isHtml) {
+      return status === 504
+        ? `Таймаут шлюза (${status}): Vercel → Render не дождались ответа. Повторите или обновите страницу после долгого парса.`
+        : `Ошибка шлюза (${status}): между Vercel и Render нет нормального ответа (перезапуск, перегрузка или гонка запросов). Повторите; Render → Logs.`;
+    }
+  }
+
   if (typeof data === 'string') {
-    return humanizeIfHtmlErrorBody(data, error.response?.status);
+    return humanizeIfHtmlErrorBody(data, status);
   }
 
   if (data?.detail != null) {
@@ -112,7 +134,7 @@ export function getApiErrorMessage(error) {
   }
 
   const fallback = stringifyApiValue(error.message) || 'Ошибка запроса';
-  return humanizeIfHtmlErrorBody(fallback, error.response?.status);
+  return humanizeIfHtmlErrorBody(fallback, status);
 }
 
 function getNetworkErrorHint() {

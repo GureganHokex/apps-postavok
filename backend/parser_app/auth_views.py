@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -95,10 +95,13 @@ class AuthLogoutView(APIView):
 
 
 @api_view(['GET'])
+@authentication_classes([SessionAuthenticationNoCSRF])
 @permission_classes([IsAuthenticated])
 def auth_me(request):
     """
     GET /api/auth/me/
     Возвращает текущего пользователя и роль.
+    SessionAuthenticationNoCSRF — SPA на другом origin (Vercel) не шлёт CSRF cookie/header на GET,
+    иначе стандартный SessionAuthentication даёт 403 Forbidden.
     """
     return Response(_user_response(request.user))

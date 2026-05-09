@@ -174,20 +174,20 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
             }
           }
         } catch (err) {
-          // Если ошибка получения прогресса, проверяем статус
-          if (err.response?.status === 404 || err.response?.status >= 500) {
-            console.warn('Progress polling error:', err);
-            // Продолжаем проверять, возможно парсинг еще не начался
-          } else {
-            // Другие ошибки - останавливаем polling
+          const status = err.response?.status;
+          // Не рвём polling из‑за таймаута/очереди/шлюза: при 1 воркере Gunicorn POST /parse/ блокирует воркер,
+          // GET parse_progress ждёт минутами — парсинг на сервере при этом может успешно завершиться.
+          if (status === 404) {
             if (progressIntervalRef.current) {
               clearInterval(progressIntervalRef.current);
               progressIntervalRef.current = null;
             }
             setParsing(false);
-            setError('Ошибка получения прогресса парсинга');
-            toast.error('Ошибка получения прогресса парсинга');
+            setError('Файл не найден');
+            toast.error('Файл не найден');
+            return;
           }
+          console.warn('Progress polling (продолжаем ждать):', err.message || status || err);
         }
       }, 500); // Проверяем каждые 500мс
       

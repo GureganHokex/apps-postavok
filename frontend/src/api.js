@@ -185,7 +185,8 @@ export const deleteSupplier = async (id) => {
  * @returns {Promise} Promise с данными о прогрессе
  */
 export const getParseProgress = async (fileId) => {
-  const response = await api.get(`/files/${fileId}/parse_progress/`);
+  // Долгий timeout: при одном воркере Gunicorn GET может ждать в очереди, пока идёт тяжёлый POST /parse/.
+  const response = await api.get(`/files/${fileId}/parse_progress/`, { timeout: 180000 });
   return response.data;
 };
 

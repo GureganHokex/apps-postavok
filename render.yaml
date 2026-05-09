@@ -23,11 +23,11 @@ services:
       - key: DB_NAME
         value: postgres
       - key: DB_USER
-        value: postgres
+        value: postgres.jvmgqwtcwhcmexmszreg
       - key: DB_PASSWORD
         sync: false
       - key: DB_HOST
-        sync: false
+        value: aws-1-eu-central-1.pooler.supabase.com
       - key: DB_PORT
         value: "5432"
       - key: DB_SSLMODE

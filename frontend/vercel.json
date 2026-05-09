@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://apps-postavok-backend.onrender.com/api/$1"
+      "destination": "https://apps-postavok-backend-t7ix.onrender.com/api/$1"
     },
     {
       "source": "/media/(.*)",
-      "destination": "https://apps-postavok-backend.onrender.com/media/$1"
+      "destination": "https://apps-postavok-backend-t7ix.onrender.com/media/$1"
     }
   ]
 }

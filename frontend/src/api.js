@@ -146,7 +146,8 @@ export const uploadFile = async (file) => {
  */
 export const parseFile = async (fileId, supplierInfo = null) => {
   const data = supplierInfo ? { ...supplierInfo } : {};
-  const response = await api.post(`/files/${fileId}/parse/`, data);
+  // Парсинг большого Excel на сервере может идти много минут — не обрывать axios по умолчанию.
+  const response = await api.post(`/files/${fileId}/parse/`, data, { timeout: 1200000 });
   return response.data;
 };
 

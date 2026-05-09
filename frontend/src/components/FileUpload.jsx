@@ -22,6 +22,8 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const progressIntervalRef = useRef(null);
+  /** Защита от двойного завершения: и по polling, и по ответу POST /parse/. */
+  const parseDoneRef = useRef(false);
 
   const onDrop = async (acceptedFiles) => {
     setError(null);
@@ -64,110 +66,135 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
   };
 
   const handleParse = async (fileData, supplierInfo = null) => {
+    parseDoneRef.current = false;
     // Очищаем предыдущий interval если есть
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
-    
+
+    const stopProgressPolling = () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
+
+    const finalizeParseSuccess = async (totalItemsHint) => {
+      if (parseDoneRef.current) return;
+      parseDoneRef.current = true;
+      stopProgressPolling();
+      try {
+        setParseProgress(90);
+        setParseMessage('Загрузка позиций...');
+
+        const itemsResponse = await getFileItems(fileData.id);
+        const itemsData = Array.isArray(itemsResponse)
+          ? itemsResponse
+          : (itemsResponse.results || itemsResponse.items || []);
+        setParseProgress(95);
+        setParseMessage('Загрузка метаданных...');
+
+        let metadataData = null;
+        try {
+          metadataData = await getFileMetadata(fileData.id);
+        } catch {
+          // метаданные опциональны
+        }
+
+        setParseProgress(100);
+        setParseMessage('Завершено!');
+
+        const count = totalItemsHint ?? itemsData.length;
+        const successMsg = `Парсинг завершен. Найдено позиций: ${count}`;
+        toast.success(successMsg);
+        setSuccess(successMsg);
+
+        if (onFileUploaded) {
+          onFileUploaded(fileData);
+        }
+        if (onParseComplete) {
+          onParseComplete({ items_created: count }, itemsData, metadataData);
+        }
+
+        setTimeout(() => {
+          setParsing(false);
+          setParseProgress(0);
+          setParseMessage('');
+        }, 1000);
+      } catch (e) {
+        parseDoneRef.current = true;
+        stopProgressPolling();
+        setParsing(false);
+        const msg = e?.message || 'Ошибка после парсинга';
+        setError(msg);
+        toast.error(msg);
+      }
+    };
+
     try {
       setParsing(true);
       setError(null);
       setParseProgress(0);
       setParseMessage('Запуск парсинга...');
-      
-      // Сохраняем время начала для проверки таймаута
+
       window.parseStartTime = Date.now();
-      
-      // Запускаем парсинг асинхронно (не ждем завершения)
-      parseFile(fileData.id, supplierInfo).catch(err => {
-        // Ошибка будет обработана через polling
-        console.error('Parse error:', err);
-        if (progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
-          progressIntervalRef.current = null;
-        }
-      });
-      
+
+      // Главный сценарий: успешный POST /parse/ уже значит «парсинг на сервере завершён» (см. backend views).
+      // Polling только для прогресс-бара; при сбоях GET UI всё равно дойдёт до конца по этому promise.
+      parseFile(fileData.id, supplierInfo)
+        .then(async (result) => {
+          await finalizeParseSuccess(result?.items_created);
+        })
+        .catch((err) => {
+          stopProgressPolling();
+          if (parseDoneRef.current) return;
+          parseDoneRef.current = true;
+          setParsing(false);
+          const msg =
+            err.response?.data?.error ||
+            err.response?.data?.detail ||
+            err.message ||
+            'Ошибка парсинга';
+          setError(msg);
+          toast.error(msg);
+        });
+
       // Polling для получения прогресса
       let notStartedCount = 0;
       progressIntervalRef.current = setInterval(async () => {
+        if (parseDoneRef.current) return;
         try {
           const progress = await getParseProgress(fileData.id);
-          
-          // Если статус not_started, увеличиваем счетчик
+
           if (progress.status === 'not_started') {
             notStartedCount++;
-            // Если прошло больше 3 секунд (6 проверок по 500мс), возможно парсинг не запустился
-            if (notStartedCount > 6) {
-              if (progressIntervalRef.current) {
-                clearInterval(progressIntervalRef.current);
-                progressIntervalRef.current = null;
+            // Долгий POST на одном воркере: not_started может держаться минуты — не обрываем через 3 с.
+            if (notStartedCount > 600) {
+              stopProgressPolling();
+              if (!parseDoneRef.current) {
+                parseDoneRef.current = true;
+                setParsing(false);
+                setError('Парсинг не запустился. Проверьте консоль браузера на наличие ошибок.');
+                toast.error('Парсинг не запустился');
               }
-              setParsing(false);
-              setError('Парсинг не запустился. Проверьте консоль браузера на наличие ошибок.');
-              toast.error('Парсинг не запустился');
               return;
             }
-            // Продолжаем ждать
             return;
           }
-          
-          // Сбрасываем счетчик если статус изменился
+
           notStartedCount = 0;
-          
+
           setParseProgress(progress.progress || 0);
           setParseMessage(progress.message || 'Обработка...');
-          
-          // Если парсинг завершен или произошла ошибка, останавливаем polling
+
           if (progress.status === 'completed' || progress.status === 'error') {
-            if (progressIntervalRef.current) {
-              clearInterval(progressIntervalRef.current);
-              progressIntervalRef.current = null;
-            }
-            
             if (progress.status === 'completed') {
-              // Загрузка позиций
-              setParseProgress(90);
-              setParseMessage('Загрузка позиций...');
-      
-              // Получаем распарсенные позиции
-              const itemsResponse = await getFileItems(fileData.id);
-              // Обрабатываем ответ - может быть массив или объект
-              const itemsData = Array.isArray(itemsResponse) ? itemsResponse : (itemsResponse.results || itemsResponse.items || []);
-              setParseProgress(95);
-              setParseMessage('Загрузка метаданных...');
-              
-              // Получаем метаданные
-              let metadataData = null;
-              try {
-                metadataData = await getFileMetadata(fileData.id);
-              } catch (err) {
-                // Метаданные могут отсутствовать, если парсинг не завершился
-              }
-              
-              setParseProgress(100);
-              setParseMessage('Завершено!');
-              
-              const successMsg = `Парсинг завершен. Найдено позиций: ${progress.total_items || itemsData.length}`;
-              toast.success(successMsg);
-              setSuccess(successMsg);
-              
-              // Уведомляем родительский компонент
-              if (onFileUploaded) {
-                onFileUploaded(fileData);
-              }
-              if (onParseComplete) {
-                onParseComplete({ items_created: progress.total_items }, itemsData, metadataData);
-              }
-              
-              // Скрываем прогресс через секунду
-              setTimeout(() => {
-                setParsing(false);
-                setParseProgress(0);
-                setParseMessage('');
-              }, 1000);
+              await finalizeParseSuccess(progress.total_items);
             } else if (progress.status === 'error') {
+              if (parseDoneRef.current) return;
+              parseDoneRef.current = true;
+              stopProgressPolling();
               setParsing(false);
               setError(progress.message || 'Ошибка парсинга');
               toast.error(progress.message || 'Ошибка парсинга');
@@ -175,35 +202,25 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
           }
         } catch (err) {
           const status = err.response?.status;
-          // Не рвём polling из‑за таймаута/очереди/шлюза: при 1 воркере Gunicorn POST /parse/ блокирует воркер,
-          // GET parse_progress ждёт минутами — парсинг на сервере при этом может успешно завершиться.
           if (status === 404) {
-            if (progressIntervalRef.current) {
-              clearInterval(progressIntervalRef.current);
-              progressIntervalRef.current = null;
+            stopProgressPolling();
+            if (!parseDoneRef.current) {
+              parseDoneRef.current = true;
+              setParsing(false);
+              setError('Файл не найден');
+              toast.error('Файл не найден');
             }
-            setParsing(false);
-            setError('Файл не найден');
-            toast.error('Файл не найден');
             return;
           }
           console.warn('Progress polling (продолжаем ждать):', err.message || status || err);
         }
-      }, 500); // Проверяем каждые 500мс
-      
-      // Таймаут на случай, если парсинг зависнет
-      setTimeout(async () => {
-        if (progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
-          progressIntervalRef.current = null;
-          const finalProgress = await getParseProgress(fileData.id).catch(() => null);
-          if (finalProgress?.status !== 'completed' && finalProgress?.status !== 'error') {
-            setParsing(false);
-            setError('Парсинг занял слишком много времени');
-            toast.error('Парсинг занял слишком много времени');
-          }
-        }
-      }, 300000); // 5 минут таймаут
+      }, 500);
+
+      // Только отключаем poll через 20 мин — итог всё равно придёт по POST /parse/ (таймаут в api.js).
+      setTimeout(() => {
+        if (parseDoneRef.current) return;
+        stopProgressPolling();
+      }, 1200000);
     } catch (err) {
       const errorMsg = `Ошибка парсинга: ${err.message}`;
       toast.error(errorMsg);

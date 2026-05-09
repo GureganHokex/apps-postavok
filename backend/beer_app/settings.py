@@ -270,6 +270,8 @@ if not DEBUG:
     # Фронт на другом origin (Vercel) + API на Render: иначе браузер не пришлёт sessionid на XHR.
     SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'None')
     CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'None')
+    # Продлевает сессию при каждом запросе (долгий парс + следующий XHR не «теряют» cookie по краю TTL).
+    SESSION_SAVE_EVERY_REQUEST = os.getenv('SESSION_SAVE_EVERY_REQUEST', 'true').lower() == 'true'
 
 # Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')

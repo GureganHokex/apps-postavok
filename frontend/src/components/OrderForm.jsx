@@ -49,11 +49,31 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
 
       try {
         setLoadingItems(true);
-        
-        // Загружаем все позиции без фильтра по листу для получения всех выбранных
-        // Используем пустые фильтры, чтобы получить все позиции, затем фильтруем по selectedItems
-        const allItems = await getFileItems(fileId, {});
-        const itemsToShow = allItems.filter(item => selectedItems.includes(item.id));
+
+        const normalizeList = (raw) => {
+          if (Array.isArray(raw)) return raw;
+          if (raw && Array.isArray(raw.results)) return raw.results;
+          return [];
+        };
+
+        const selectedSet = new Set(selectedItems.map(Number));
+
+        // Сначала берём позиции из родителя (уже в памяти после парсинга / вкладки «Позиции»).
+        // Повторный GET /files/:id/items/ после долгого парса иногда даёт 401 (сессия/прокси) — без лишнего запроса не падаем.
+        let allItems = null;
+        const parentList = normalizeList(items);
+        if (parentList.length > 0) {
+          const missing = [...selectedSet].some((id) => !parentList.some((it) => Number(it.id) === id));
+          if (!missing) {
+            allItems = parentList;
+          }
+        }
+        if (allItems === null) {
+          const raw = await getFileItems(fileId, {});
+          allItems = normalizeList(raw);
+        }
+
+        const itemsToShow = allItems.filter((item) => selectedSet.has(Number(item.id)));
         
         setOrderItems(itemsToShow);
         
@@ -84,7 +104,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
     };
 
     loadSelectedItems();
-  }, [selectedItems, fileId, isKeg]);
+  }, [selectedItems, fileId, isKeg, items]);
 
   const [quantityErrors, setQuantityErrors] = useState({});
 

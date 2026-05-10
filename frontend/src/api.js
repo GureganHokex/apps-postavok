@@ -27,7 +27,21 @@ function resolveApiBaseUrl() {
   return fromEnv || 'http://localhost:8000/api';
 }
 
+/**
+ * База только для POST multipart /upload/: обходит Vercel→Render, если задан REACT_APP_UPLOAD_API_URL.
+ * Сессионные cookie с домена Vercel на onrender.com не уйдут — используйте только вместе с полным
+ * REACT_APP_FORCE_API_URL (весь API на Render) или если backend принимает загрузку без той же сессии.
+ */
+function resolveUploadApiBaseUrl() {
+  const uploadOnly = (process.env.REACT_APP_UPLOAD_API_URL || '').trim().replace(/\/$/, '');
+  if (uploadOnly) {
+    return uploadOnly;
+  }
+  return resolveApiBaseUrl();
+}
+
 const API_BASE_URL = resolveApiBaseUrl();
+const UPLOAD_API_BASE_URL = resolveUploadApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -42,7 +56,7 @@ const api = axios.create({
  * Иначе axios transformRequest при FormData превращает тело в JSON — DRF: «Неподдерживаемый тип… application/json».
  */
 const uploadApi = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: UPLOAD_API_BASE_URL,
   withCredentials: true,
 });
 
@@ -55,13 +69,18 @@ function humanizeIfHtmlErrorBody(str, status) {
   if (code === 502 || code === 503) {
     return (
       `Ошибка шлюза (${code}): ответ пришёл как HTML-заглушка прокси, а не JSON. ` +
-      'Обычно это краткий сбой или таймаут между Vercel и Render при долгом запросе — повторите; если парсинг на сервере уже прошёл, обновите страницу и откройте вкладку «Позиции». Логи: Render → Logs.'
+      'Часто это лимит времени/тела запроса на цепочке Vercel → Render при большой загрузке (multipart) или тяжёлом ZIP. ' +
+      'Повторите попытку; откройте вкладку «Позиции» после обновления страницы — файл мог уже сохраниться. ' +
+      'Для больших файлов: задайте в Vercel REACT_APP_FORCE_API_URL=1 и REACT_APP_API_URL=https://<backend>/api ' +
+      '(все запросы, включая вход, на тот же origin Render + CORS), либо REACT_APP_UPLOAD_API_URL на тот же backend при совместимой авторизации. ' +
+      'Логи: Render → Logs.'
     );
   }
   if (code === 504) {
     return (
       `Таймаут шлюза (${code}): прокси не дождался ответа от backend. ` +
-      'При долгом парсе данные на Render могут уже сохраниться — обновите страницу. Логи: Render → Logs.'
+      'Данные на Render могут уже сохраниться — обновите страницу и проверьте «Позиции». ' +
+      'При очень больших загрузках см. REACT_APP_FORCE_API_URL / REACT_APP_UPLOAD_API_URL в переменных окружения фронта. Логи: Render → Logs.'
     );
   }
   return (
@@ -111,8 +130,8 @@ export function getApiErrorMessage(error) {
     const isHtml = /^<!doctype html|^<html/i.test(raw);
     if (!isHtml) {
       return status === 504
-        ? `Таймаут шлюза (${status}): Vercel → Render не дождались ответа. Повторите или обновите страницу после долгого парса.`
-        : `Ошибка шлюза (${status}): между Vercel и Render нет нормального ответа (перезапуск, перегрузка или гонка запросов). Повторите; Render → Logs.`;
+        ? `Таймаут шлюза (${status}): Vercel → Render не дождались ответа. Повторите или обновите страницу и вкладку «Позиции». Для тяжёлых загрузок: REACT_APP_FORCE_API_URL + REACT_APP_API_URL.`
+        : `Ошибка шлюза (${status}): Vercel → Render (часто большой POST /upload/ или холодный старт). Повторите; обновите страницу; при больших файлах — прямой API: REACT_APP_FORCE_API_URL=1 и REACT_APP_API_URL. Render → Logs.`;
     }
   }
 
@@ -169,7 +188,8 @@ function getNetworkErrorHint() {
     return (
       `Не удаётся связаться с API (${API_BASE_URL}). ` +
       'Запрос идёт через ваш домен (rewrite на Render): убедитесь, что backend на Render в состоянии Live, ' +
-      'а destination в frontend/vercel.json совпадает с актуальным URL сервиса.'
+      'а destination в frontend/vercel.json совпадает с актуальным URL сервиса. ' +
+      'Долгие загрузки multipart могут обрываться прокси — тогда REACT_APP_FORCE_API_URL + REACT_APP_API_URL на Render.'
     );
   }
   return `Не удаётся связаться с API (${API_BASE_URL}). Проверьте URL backend на Render и CORS (CORS_ALLOWED_ORIGINS).`;
@@ -265,8 +285,11 @@ export const uploadFile = async (file) => {
   formData.append('file', file);
 
   // Только uploadApi: без дефолтного JSON — браузер выставит multipart + boundary.
+  // Таймаут клиента не продлевает лимит прокси Vercel→Render; для тяжёлых тел см. REACT_APP_UPLOAD_API_URL / FORCE.
   const response = await uploadApi.post('/upload/', formData, {
-    timeout: 600000, // 10 мин — большие xlsx через Vercel→Render
+    timeout: 600000, // 10 мин — ожидание ответа после отправки тела
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
   });
 
   return response.data;

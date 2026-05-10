@@ -35,7 +35,20 @@ class OrderExporter:
             order: Объект заказа для экспорта
         """
         self.order = order
-    
+
+    @staticmethod
+    def _merge_anchor(ws, row: int, col: int) -> tuple[int, int]:
+        """
+        openpyxl: only the top-left cell of a merged range is writable; other cells are MergedCell (read-only).
+        """
+        for cell_range in ws.merged_cells.ranges:
+            if (
+                cell_range.min_row <= row <= cell_range.max_row
+                and cell_range.min_col <= col <= cell_range.max_col
+            ):
+                return cell_range.min_row, cell_range.min_col
+        return row, col
+
     def export(self) -> str:
         """
         Экспортирует заказ в выбранный формат.
@@ -217,8 +230,8 @@ class OrderExporter:
             # Если колонки "Заказ" нет, добавляем её справа
             if order_col_idx is None:
                 order_col_idx = ws.max_column + 1
-                # Записываем заголовок "Заказ"
-                ws.cell(row=header_row, column=order_col_idx, value='Заказ')
+                hr, hc = self._merge_anchor(ws, header_row, order_col_idx)
+                ws.cell(row=hr, column=hc, value='Заказ')
             
             # Сохраняем индекс колонки для этого листа
             order_col_indices[sheet_name] = order_col_idx
@@ -238,12 +251,11 @@ class OrderExporter:
                     excel_row = row_num + 2
                     
                     if header_row + 1 <= excel_row <= ws.max_row:
-                        # Удаляем формулу, если она есть
-                        cell = ws.cell(row=excel_row, column=order_col_idx)
+                        ar, ac = self._merge_anchor(ws, excel_row, order_col_idx)
+                        cell = ws.cell(row=ar, column=ac)
                         if cell.data_type == 'f':
                             cell.value = None
-                        # Записываем количество напрямую через ws.cell()
-                        ws.cell(row=excel_row, column=order_col_idx, value=quantity)
+                        ws.cell(row=ar, column=ac, value=quantity)
                         filled_rows.add(excel_row)
             
         # Восстанавливаем все значения для всех листов после обработки всех листов
@@ -269,7 +281,8 @@ class OrderExporter:
                         excel_row = row_num + 2
                         
                         if excel_row <= ws_check.max_row:
-                            cell_check = ws_check.cell(row=excel_row, column=order_col_idx)
+                            ar, ac = self._merge_anchor(ws_check, excel_row, order_col_idx)
+                            cell_check = ws_check.cell(row=ar, column=ac)
                             # Сравниваем значения, преобразуя в числа для надежности
                             cell_value = cell_check.value
                             if cell_value is not None:
@@ -287,7 +300,7 @@ class OrderExporter:
                                 # Очищаем формулу, если она есть
                                 if cell_check.data_type == 'f':
                                     cell_check.value = None
-                                ws_check.cell(row=excel_row, column=order_col_idx, value=quantity)
+                                ws_check.cell(row=ar, column=ac, value=quantity)
                 except ParsedItem.DoesNotExist:
                     continue
         
@@ -314,7 +327,8 @@ class OrderExporter:
                         excel_row = row_num + 2
                         
                         if excel_row <= ws_final.max_row:
-                            cell_final = ws_final.cell(row=excel_row, column=order_col_idx)
+                            ar, ac = self._merge_anchor(ws_final, excel_row, order_col_idx)
+                            cell_final = ws_final.cell(row=ar, column=ac)
                             # Сравниваем значения, преобразуя в числа для надежности
                             cell_value = cell_final.value
                             if cell_value is not None:
@@ -348,7 +362,7 @@ class OrderExporter:
                             # Если значение неверное, исправляем
                             if cell_final.data_type == 'f':
                                 cell_final.value = None
-                            ws_final.cell(row=excel_row, column=order_col_idx, value=order_value)
+                            ws_final.cell(row=ar, column=ac, value=order_value)
                 except ParsedItem.DoesNotExist:
                     continue
         

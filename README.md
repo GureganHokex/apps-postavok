@@ -187,7 +187,7 @@ python manage.py create_admin_user
 
 - `POST /api/upload/` — загрузка файла.
 - `GET /api/files/` — список файлов.
-- `POST /api/files/<id>/parse/` — запуск парсинга.
+- `POST /api/files/<id>/parse/` — запуск парсинга (**202 Accepted** сразу, работа в фоне; итог — `parse_progress/` + позиции).
 - `GET /api/files/<id>/parse_progress/` — прогресс парсинга.
 - `GET /api/files/<id>/items/` — позиции файла.
 - `GET /api/files/<id>/metadata/` — метаданные.
@@ -229,6 +229,10 @@ python manage.py create_admin_user
 - `GET/POST /api/parsing-feedback/` — feedback по парсингу.
 
 ## Деплой
+
+**Vercel → Render:** `frontend/vercel.json` проксирует `/api` на backend. У платформенного rewrite короткий лимит ожидания ответа; долгий синхронный `POST …/parse/` давал 502 и HTML вместо JSON. Парсинг вынесен в фон после **202**; прогресс — `GET …/parse_progress/`. Тяжёлый `POST /api/upload/` при очень больших файлах всё ещё может упираться в лимит шлюза — тогда имеет смысл `REACT_APP_FORCE_API_URL` на прямой Render (см. комментарии в `frontend/src/api.js`).
+
+**Фоновые задачи / cron:** в репозитории нет Celery, django-crontab и отдельных Render Cron Jobs в `render.yaml`; синхронизация данных — по HTTP API и ручным действиям в UI. При появлении периодических задач их лучше оформить отдельным Render Cron или management-командой + внешний планировщик.
 
 Backend рассчитан на Render:
 

@@ -11,9 +11,9 @@ if [ -n "${ADMIN_PASSWORD:-}" ]; then
 fi
 python manage.py collectstatic --noinput
 
-# Gunicorn: 2 воркера — один может обслуживать GET parse_progress, пока другой выполняет долгий POST /parse/.
+# Gunicorn: 2 воркера — GET parse_progress и остальной API, пока другой воркер занят фоновым парсингом (после 202 на POST /parse/).
 # При OOM верни GUNICORN_WORKERS=1 в env Render. На платном плане можно 3.
-# Таймаут большой: парсинг большого Excel может идти минутами.
+# Таймаут большой: фоновый парсинг большого Excel может идти минуты внутри воркера.
 exec gunicorn beer_app.wsgi:application \
   --bind "0.0.0.0:${PORT:-8000}" \
   --workers "${GUNICORN_WORKERS:-2}" \

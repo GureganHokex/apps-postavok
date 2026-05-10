@@ -147,10 +147,13 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
 
       window.parseStartTime = Date.now();
 
-      // Главный сценарий: успешный POST /parse/ уже значит «парсинг на сервере завершён» (см. backend views).
-      // Polling только для прогресс-бара; при сбоях GET UI всё равно дойдёт до конца по этому promise.
+      // POST /parse/ — 202 «принято», итог по GET parse_progress/ (прогресс-бар) + finalize при completed.
+      // 200 — только если backend когда-либо вернёт синхронный успех (локальная совместимость).
       parseFile(fileData.id, supplierInfo)
         .then(async (result) => {
+          if (result?.accepted || result?.status === 'accepted') {
+            return;
+          }
           await finalizeParseSuccess(result?.items_created);
         })
         .catch((err) => {

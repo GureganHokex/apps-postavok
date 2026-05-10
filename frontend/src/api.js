@@ -281,8 +281,14 @@ export const uploadFile = async (file) => {
  */
 export const parseFile = async (fileId, supplierInfo = null) => {
   const data = supplierInfo ? { ...supplierInfo } : {};
-  // Парсинг большого Excel на сервере может идти много минут — не обрывать axios по умолчанию.
-  const response = await api.post(`/files/${fileId}/parse/`, data, { timeout: 1200000 });
+  // POST /parse/ отдаёт 202 сразу, парсинг в фоне (иначе Vercel→Render обрывает долгий ответ 502/HTML).
+  const response = await api.post(`/files/${fileId}/parse/`, data, {
+    timeout: 120000,
+    validateStatus: (s) => s === 200 || s === 202,
+  });
+  if (response.status === 202) {
+    return { accepted: true, ...(response.data || {}) };
+  }
   return response.data;
 };
 

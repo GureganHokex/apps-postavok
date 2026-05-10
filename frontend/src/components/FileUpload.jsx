@@ -178,6 +178,12 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
           const progress = await getParseProgress(fileData.id);
 
           if (progress.status === 'not_started') {
+            if (progress.is_running === false) {
+              // Бэкенд может очистить ключ прогресса раньше, чем UI поймал completed.
+              // Если lock снят, считаем, что процесс уже завершился и подтягиваем фактические данные.
+              await finalizeParseSuccess(progress.total_items);
+              return;
+            }
             notStartedCount++;
             // Долгий POST на одном воркере: not_started может держаться минуты — не обрываем через 3 с.
             if (notStartedCount > 600) {

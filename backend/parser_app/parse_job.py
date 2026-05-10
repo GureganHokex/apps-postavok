@@ -412,7 +412,7 @@ def _run_file_parse_job_impl(file_id: int, user_id: int, request_data: dict) -> 
             'message': f'Парсинг завершен! Обработано {len(product_items)} позиций',
             'total_items': len(product_items),
             'processed_items': len(product_items),
-        }, timeout=60)  # Храним 1 минуту после завершения
+        }, timeout=600)  # Держим дольше, чтобы фронт стабильно увидел terminal state
     except Exception as cache_err:
         logger.warning(f"Ошибка завершения прогресса в кэше: {cache_err}")
 

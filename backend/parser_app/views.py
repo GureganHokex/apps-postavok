@@ -59,6 +59,42 @@ class FileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAdmin]
     queryset = File.objects.all()
     serializer_class = FileSerializer
+
+    def _infer_terminal_progress(self, file_obj):
+        """Возвращает терминальный статус, если активный progress-ключ отсутствует."""
+        latest_run = ParseRun.objects.filter(file=file_obj).order_by('-created_at').first()
+        items_count = ParsedItem.objects.filter(file=file_obj).count()
+
+        if latest_run and latest_run.status == 'failed':
+            run_errors = ((latest_run.summary or {}).get('errors') or [])
+            first_error = run_errors[0].get('message') if run_errors and isinstance(run_errors[0], dict) else None
+            return {
+                'status': 'error',
+                'progress': 0,
+                'message': first_error or 'Ошибка парсинга',
+                'total_items': items_count,
+                'processed_items': items_count,
+                'is_running': False,
+            }
+
+        if items_count > 0 or (latest_run and latest_run.status in {'completed', 'partial'}):
+            return {
+                'status': 'completed',
+                'progress': 100,
+                'message': f'Парсинг завершен. Обработано {items_count} позиций',
+                'total_items': items_count,
+                'processed_items': items_count,
+                'is_running': False,
+            }
+
+        return {
+            'status': 'not_started',
+            'progress': 0,
+            'message': 'Парсинг не запущен',
+            'total_items': 0,
+            'processed_items': 0,
+            'is_running': False,
+        }
     
     @action(detail=True, methods=['post'])
     def parse(self, request, pk=None):
@@ -139,18 +175,26 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         file_obj = self.get_object()
         progress_key = f'parse_progress_{file_obj.id}'
-        
+        lock_key = f'parse_running_{file_obj.id}'
+        is_running = bool(cache.get(lock_key))
+
         progress = cache.get(progress_key)
-        
+
         if not progress:
-            return Response({
-                'status': 'not_started',
-                'progress': 0,
-                'message': 'Парсинг не запущен',
-                'total_items': 0,
-                'processed_items': 0,
-            })
-        
+            if is_running:
+                return Response({
+                    'status': 'starting',
+                    'progress': 0,
+                    'message': 'Парсинг запущен, ожидаем первый прогресс...',
+                    'total_items': 0,
+                    'processed_items': 0,
+                    'is_running': True,
+                })
+            return Response(self._infer_terminal_progress(file_obj))
+
+        if isinstance(progress, dict):
+            progress = {**progress, 'is_running': is_running}
+
         return Response(progress)
     
     @action(detail=True, methods=['get'])

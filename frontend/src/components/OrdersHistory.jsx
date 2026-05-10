@@ -20,8 +20,12 @@ function OrdersHistory() {
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   const { data: ordersData, isLoading, error, refetch } = useQuery({
-    queryKey: ['orders', filters],
-    queryFn: () => getOrders(filters),
+    queryKey: ['orders', filters.date_from, filters.date_to],
+    queryFn: () =>
+      getOrders({
+        date_from: filters.date_from || undefined,
+        date_to: filters.date_to || undefined,
+      }),
     staleTime: 30000, // 30 секунд
   });
 
@@ -29,6 +33,16 @@ function OrdersHistory() {
     const raw = ordersData?.results ?? ordersData;
     return Array.isArray(raw) ? raw : [];
   }, [ordersData]);
+
+  const getDisplayItems = useCallback((order) => {
+    if (Array.isArray(order?.resolved_items) && order.resolved_items.length > 0) {
+      return order.resolved_items;
+    }
+    if (Array.isArray(order?.items) && order.items.length > 0) {
+      return order.items;
+    }
+    return [];
+  }, []);
 
   const handleDownload = useCallback(async (orderId) => {
     try {
@@ -327,6 +341,19 @@ function OrdersHistory() {
                     </div>
                   </div>
 
+                  {getDisplayItems(order).length > 0 && (
+                    <div className="order-items-preview">
+                      <span className="detail-label">Позиции:</span>
+                      <span className="detail-value">
+                        {getDisplayItems(order)
+                          .slice(0, 3)
+                          .map((item) => item.beer_name || item.brewery || `ID: ${item.item_id}`)
+                          .join(', ')}
+                        {getDisplayItems(order).length > 3 ? ' ...' : ''}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="order-actions">
                     <button
                       className="button button-primary"
@@ -384,13 +411,16 @@ function OrdersHistory() {
                 <p><strong>Дата создания:</strong> {formatDate(selectedOrder.created_at)}</p>
                 <p><strong>Формат:</strong> {selectedOrder.export_format}</p>
                 <p><strong>Позиций:</strong> {selectedOrder.items?.length || 0}</p>
-                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                {getDisplayItems(selectedOrder).length > 0 && (
                   <div className="order-items-list">
                     <h3>Позиции заказа:</h3>
                     <ul>
-                      {selectedOrder.items.map((item, idx) => (
+                      {getDisplayItems(selectedOrder).map((item, idx) => (
                         <li key={idx}>
-                          ID: {item.item_id}, Количество: {item.quantity}
+                          {(item.brewery || item.beer_name)
+                            ? `${item.brewery ? `${item.brewery} | ` : ''}${item.beer_name || ''}`.trim()
+                            : `ID: ${item.item_id}`
+                          }, Количество: {item.quantity}
                         </li>
                       ))}
                     </ul>

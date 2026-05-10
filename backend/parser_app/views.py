@@ -7,6 +7,7 @@ import zipfile
 import logging
 import traceback
 import threading
+from collections import defaultdict
 from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -433,6 +434,49 @@ class OrderViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsAdminOrBartender()]
         return [IsAuthenticated(), IsAdmin()]
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            queryset = queryset.filter(created_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(created_at__date__lte=date_to)
+        return queryset
+
+    @staticmethod
+    def _collect_order_item_map(orders):
+        item_ids = {
+            row.get('item_id') or row.get('id')
+            for order in orders
+            for row in (order.items or [])
+            if row.get('item_id') or row.get('id')
+        }
+        return ParsedItem.objects.in_bulk(item_ids) if item_ids else {}
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        orders = page if page is not None else queryset
+        item_map = self._collect_order_item_map(orders)
+        serializer = self.get_serializer(
+            orders,
+            many=True,
+            context={**self.get_serializer_context(), 'parsed_item_map': item_map},
+        )
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        item_map = self._collect_order_item_map([instance])
+        serializer = self.get_serializer(
+            instance,
+            context={**self.get_serializer_context(), 'parsed_item_map': item_map},
+        )
+        return Response(serializer.data)
+
     def create(self, request):
         """
         Создает новый заказ.
@@ -454,6 +498,112 @@ class OrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """
+        Агрегированная статистика по заказам за период.
+
+        GET /api/orders/statistics/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+        """
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        qs = self.get_queryset().order_by('created_at')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        orders = list(qs)
+        item_map = self._collect_order_item_map(orders)
+
+        total_orders = len(orders)
+        total_sum = 0.0
+        total_positions = 0
+        item_sum = defaultdict(lambda: {'name': '', 'quantity': 0, 'sum': 0.0})
+        item_order_dates = defaultdict(list)
+        item_prices_by_date = defaultdict(list)
+
+        for order in orders:
+            order_date = order.created_at.date().isoformat()
+            for row in order.items or []:
+                item_id = row.get('item_id') or row.get('id')
+                if not item_id:
+                    continue
+
+                qty = int(row.get('quantity') or 1)
+                cached_item = item_map.get(item_id)
+
+                price_val = None
+                if row.get('price') is not None:
+                    try:
+                        price_val = float(row['price'])
+                    except (TypeError, ValueError):
+                        price_val = None
+                if price_val is None and cached_item and cached_item.price is not None:
+                    try:
+                        price_val = float(cached_item.price)
+                    except (TypeError, ValueError):
+                        price_val = None
+
+                item_name = (row.get('beer_name') or '').strip()
+                if not item_name and cached_item:
+                    item_name = (cached_item.beer_name or '').strip()
+                if not item_name:
+                    item_name = f'ID {item_id}'
+
+                total_positions += qty
+                line_sum = (price_val * qty) if (price_val is not None and price_val > 0) else 0.0
+                total_sum += line_sum
+
+                item_sum[item_id]['name'] = item_name
+                item_sum[item_id]['quantity'] += qty
+                item_sum[item_id]['sum'] += line_sum
+                item_order_dates[item_id].append({'date': order_date, 'quantity': qty, 'order_id': order.id})
+                if price_val is not None:
+                    item_prices_by_date[item_id].append({'date': order_date, 'price': price_val})
+
+        ranking_with_dates = []
+        for item_id, values in item_sum.items():
+            ranking_with_dates.append({
+                'item_id': item_id,
+                'name': values['name'],
+                'total_quantity': values['quantity'],
+                'total_sum': round(values['sum'], 2),
+                'by_date': sorted(item_order_dates.get(item_id, []), key=lambda x: x['date']),
+            })
+        ranking_with_dates.sort(key=lambda x: -x['total_quantity'])
+
+        price_trend = []
+        for item_id, prices_list in item_prices_by_date.items():
+            if len(prices_list) < 2:
+                continue
+            prices_list.sort(key=lambda x: x['date'])
+            first_p = prices_list[0]['price']
+            last_p = prices_list[-1]['price']
+            if first_p <= 0:
+                continue
+            change_pct = round((last_p - first_p) / first_p * 100, 1)
+            price_trend.append({
+                'item_id': item_id,
+                'name': item_sum.get(item_id, {}).get('name') or f'ID {item_id}',
+                'first_date': prices_list[0]['date'],
+                'first_price': round(first_p, 2),
+                'last_date': prices_list[-1]['date'],
+                'last_price': round(last_p, 2),
+                'change_percent': change_pct,
+            })
+        price_trend.sort(key=lambda x: -abs(x['change_percent']))
+
+        return Response({
+            'total_orders': total_orders,
+            'total_sum': round(total_sum, 2),
+            'total_positions': total_positions,
+            'average_order_sum': round(total_sum / total_orders, 2) if total_orders else 0,
+            'ranking_with_dates': ranking_with_dates[:100],
+            'price_trend': price_trend[:50],
+        })
     
     @action(detail=True, methods=['get'])
     def export(self, request, pk=None):
@@ -870,6 +1020,20 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated()]
         return [IsAuthenticated(), IsAdmin()]
 
+    @staticmethod
+    def _looks_like_keg(format_type, volume):
+        fmt = (format_type or '').strip().lower()
+        if not fmt and volume is None:
+            return False
+        if any(token in fmt for token in ('кег', 'keg', 'draft', 'tap', 'розлив')):
+            return True
+        if any(token in fmt for token in ('бан', 'can', 'бут', 'bottle')):
+            return False
+        try:
+            return float(volume or 0) >= 15
+        except (TypeError, ValueError):
+            return False
+
     def get_queryset(self):
         """Фильтрация по локации если указана."""
         queryset = super().get_queryset()
@@ -905,8 +1069,30 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
+            # Если фронт передал source_item_id — фильтруем строго по ParsedItem
+            source_ids = set()
+            for item in items:
+                raw_source_id = item.get('source_item_id')
+                if raw_source_id is None:
+                    continue
+                try:
+                    source_ids.add(int(raw_source_id))
+                except (TypeError, ValueError):
+                    continue
+            source_map = ParsedItem.objects.in_bulk(source_ids) if source_ids else {}
+
             created = []
             for item in items:
+                source_item_id = item.get('source_item_id')
+                try:
+                    source_item_key = int(source_item_id) if source_item_id is not None else None
+                except (TypeError, ValueError):
+                    source_item_key = None
+                source_item = source_map.get(source_item_key) if source_item_key is not None else None
+                if source_item is not None:
+                    if not self._looks_like_keg(source_item.format_type, source_item.volume):
+                        continue
+
                 price = item.get('price_per_liter')
                 # Преобразуем цену в Decimal или None
                 if price is not None:

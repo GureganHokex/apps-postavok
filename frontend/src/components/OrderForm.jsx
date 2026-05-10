@@ -15,6 +15,7 @@ import './OrderForm.css';
 
 // Порог, выше которого считаем цену как за кегу (а не за литр) при отсутствии точной метки
 const KEG_PER_LITER_THRESHOLD = 2000;
+const NON_KEG_FORMAT_TOKENS = ['бан', 'can', 'бут', 'bottle', 'пэт', 'pet'];
 
 const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems, items }) {
   const [orderItems, setOrderItems] = useState([]);
@@ -34,8 +35,14 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   // Определяем, похоже ли на кегу
   const isKeg = useCallback((item) => {
     const volume = parseFloat(item.volume) || 0;
-    const format = (item.format_type || '').toLowerCase();
-    return format.includes('кег') || format.includes('keg') || volume >= 10;
+    const format = (item.format_type || '').toLowerCase().trim();
+    if (format.includes('кег') || format.includes('keg') || format.includes('draft') || format.includes('розлив')) {
+      return true;
+    }
+    if (NON_KEG_FORMAT_TOKENS.some((token) => format.includes(token))) {
+      return false;
+    }
+    return volume >= 15;
   }, []);
 
   useEffect(() => {
@@ -177,11 +184,10 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
             .filter(item => {
               const qty = quantities[item.id] || 0;
               if (qty <= 0) return false;
-              const format = (item.format_type || '').toLowerCase();
-              const volume = parseFloat(item.volume) || 0;
-              return format.includes('кег') || format.includes('keg') || volume >= 10;
+              return isKeg(item);
             })
             .map(item => ({
+              source_item_id: item.id,
               brewery: item.brewery || '',
               beer_name: item.beer_name || '',
               price_per_liter: item.price || null,
@@ -231,10 +237,8 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
    * Проверяем, что позиция выглядит как кега.
    */
   const isKegFormat = useCallback((item) => {
-    const volume = parseFloat(item.volume) || 0;
-    const format = (item.format_type || '').toLowerCase();
-    return format.includes('кег') || format.includes('keg') || volume >= 10;
-  }, []);
+    return isKeg(item);
+  }, [isKeg]);
 
   /**
    * Считает стоимость позиции с учётом кег:
@@ -336,12 +340,10 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       .filter(item => {
         const qty = quantities[item.id] || 0;
         if (qty <= 0) return false;
-        const format = (item.format_type || '').toLowerCase();
-        const volume = parseFloat(item.volume) || 0;
-        // Только кеги: содержит "кег" или "keg" или объем >= 10 литров
-        return format.includes('кег') || format.includes('keg') || volume >= 10;
+        return isKeg(item);
       })
       .map(item => ({
+        source_item_id: item.id,
         brewery: item.brewery || '',
         beer_name: item.beer_name || '',
         price_per_liter: item.price || null,
@@ -361,7 +363,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       const errorMsg = err.response?.data?.error || err.message || 'Ошибка отправки на краны';
       toast.error(errorMsg);
     }
-  }, [orderItems, quantities, selectedLocationId]);
+  }, [orderItems, quantities, selectedLocationId, isKeg]);
 
   return (
     <div className="OrderForm">
@@ -579,9 +581,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
                         .filter(item => {
                           const qty = quantities[item.id] || 0;
                           if (qty <= 0) return false;
-                          const format = (item.format_type || '').toLowerCase();
-                          const volume = parseFloat(item.volume) || 0;
-                          return format.includes('кег') || format.includes('keg') || volume >= 10;
+                          return isKeg(item);
                         })
                         .map(item => (
                           <li key={item.id}>

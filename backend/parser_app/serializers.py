@@ -57,15 +57,43 @@ class OrderSerializer(serializers.ModelSerializer):
     """Serializer для модели Order."""
     
     items_count = serializers.SerializerMethodField()
+    resolved_items = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
-        fields = ['id', 'created_at', 'items', 'export_format', 
+        fields = ['id', 'created_at', 'items', 'resolved_items', 'export_format',
                  'export_file_path', 'items_count']
     
     def get_items_count(self, obj):
         """Возвращает количество позиций в заказе."""
-        return len(obj.items)
+        return len(obj.items or [])
+
+    def get_resolved_items(self, obj):
+        """
+        Возвращает позиции заказа с человекочитаемыми полями.
+        Для старых заказов, где в JSON только item_id/quantity, подтягиваем данные из ParsedItem.
+        """
+        rows = obj.items or []
+        item_map = self.context.get('parsed_item_map')
+        if item_map is None:
+            item_ids = [row.get('item_id') or row.get('id') for row in rows]
+            item_ids = [item_id for item_id in item_ids if item_id]
+            item_map = ParsedItem.objects.in_bulk(item_ids) if item_ids else {}
+
+        result = []
+        for row in rows:
+            item_id = row.get('item_id') or row.get('id')
+            item = item_map.get(item_id)
+            quantity = row.get('quantity') or 1
+            result.append({
+                'item_id': item_id,
+                'quantity': quantity,
+                'brewery': row.get('brewery') or (item.brewery if item else ''),
+                'beer_name': row.get('beer_name') or (item.beer_name if item else ''),
+                'format_type': row.get('format_type') or (item.format_type if item else ''),
+                'price': row.get('price') if row.get('price') is not None else (float(item.price) if item and item.price is not None else None),
+            })
+        return result
 
 
 class OrderCreateSerializer(serializers.Serializer):

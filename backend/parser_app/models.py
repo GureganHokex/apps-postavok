@@ -559,6 +559,27 @@ class Tap(models.Model):
         default='',
         verbose_name='Описание кеги'
     )
+    # Доп. поля для доски / Untappd (заполняются из парсера или вручную админом)
+    volume_price_text = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name='Объём / цена',
+        help_text='Краткая строка для экрана, например «30 л · 420 ₽»',
+    )
+    bitterness_ibu = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        verbose_name='Горечь (IBU)',
+    )
+    abv_text = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        verbose_name='Алкоголь (ABV)',
+        help_text='Например «5.2 %»',
+    )
     # Очередь - следующие позиции
     next_beer_1 = models.CharField(
         max_length=500,
@@ -644,15 +665,37 @@ class AvailableBeer(models.Model):
         default='',
         verbose_name='Описание кеги'
     )
+    volume_price_text = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name='Объём / цена',
+    )
+    bitterness_ibu = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        verbose_name='Горечь (IBU)',
+    )
+    abv_text = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        verbose_name='Алкоголь (ABV)',
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Дата добавления'
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Порядок в списке',
     )
 
     class Meta:
         verbose_name = 'Доступное пиво'
         verbose_name_plural = 'Доступное пиво'
-        ordering = ['brewery', 'beer_name']
+        ordering = ['sort_order', 'id']
 
     def __str__(self):
         return f"{self.brewery} | {self.beer_name}"

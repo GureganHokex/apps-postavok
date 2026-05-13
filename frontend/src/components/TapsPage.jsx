@@ -2,7 +2,7 @@
  * Страница управления кранами (как в Google Sheets).
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
@@ -16,16 +16,30 @@ import {
   addAvailableBeer,
   deleteAvailableBeer,
   exportLocationTaps,
+  getAvailableBeers,
+  reorderAvailableBeers,
 } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../hooks/useBreakpoint';
 import './TapsPage.css';
 
+/** Разбор строки «Пивоварня | Название(цена)» для экранной доски */
+function splitBeerDisplay(line) {
+  if (!line || line === '—') return { brewery: '', beer: '—' };
+  const parts = line.split(/\s*\|\s*/);
+  if (parts.length >= 2) {
+    return { brewery: parts[0].trim(), beer: parts.slice(1).join(' | ').trim() };
+  }
+  return { brewery: '', beer: line.trim() };
+}
+
 function TapsPage() {
   const { role, isAdmin } = useAuth();
   const isMobile = useIsMobile();
   const canAddDeleteLocationsAndTaps = isAdmin;
-  const canOnlyChangeVisibility = role === 'user';
+  /** Роль user: только просмотр кранов, без правок (видимость настраивает персонал). */
+  const isReadOnlyTapsUser = role === 'user';
+  const canEditTapsContent = !isReadOnlyTapsUser;
   const [locations, setLocations] = useState([]);
   const [activeLocationId, setActiveLocationId] = useState(null);
   const [activeLocation, setActiveLocation] = useState(null);
@@ -50,11 +64,51 @@ function TapsPage() {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [untappdVolumePrice, setUntappdVolumePrice] = useState('');
+  const [untappdIbu, setUntappdIbu] = useState('');
+  const [untappdAbv, setUntappdAbv] = useState('');
+  const [isSavingUntappd, setIsSavingUntappd] = useState(false);
+  const [isPresentationOpen, setIsPresentationOpen] = useState(false);
+  const presentationRef = useRef(null);
+
+  const mergeTapIntoActiveLocation = useCallback((updatedTap) => {
+    if (!updatedTap || updatedTap.id == null) return;
+    setActiveLocation((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        taps: (prev.taps || []).map((t) => (t.id === updatedTap.id ? { ...t, ...updatedTap } : t)),
+      };
+    });
+  }, []);
+
+  const refreshAvailableBeers = useCallback(async () => {
+    if (!activeLocationId) return;
+    try {
+      const data = await getAvailableBeers(activeLocationId);
+      const beers = Array.isArray(data) ? data : data.results || [];
+      setActiveLocation((prev) => {
+        if (!prev || String(prev.id) !== String(activeLocationId)) return prev;
+        return { ...prev, available_beers: beers };
+      });
+    } catch (err) {
+      toast.error('Не удалось обновить список позиций');
+    }
+  }, [activeLocationId]);
 
   useEffect(() => {
     setIsEditingDescription(false);
     setDescriptionDraft('');
-  }, [detailsTap?.id]);
+    if (!detailsTap) {
+      setUntappdVolumePrice('');
+      setUntappdIbu('');
+      setUntappdAbv('');
+      return;
+    }
+    setUntappdVolumePrice(detailsTap.volume_price_text || '');
+    setUntappdIbu(detailsTap.bitterness_ibu || '');
+    setUntappdAbv(detailsTap.abv_text || '');
+  }, [detailsTap]);
 
   const startEditDescription = () => {
     if (!detailsTap) return;
@@ -72,16 +126,35 @@ function TapsPage() {
     setIsSavingDescription(true);
     try {
       const nextDescription = descriptionDraft;
-      await updateTap(detailsTap.id, { description: nextDescription });
-      setDetailsTap((prev) => (prev ? { ...prev, description: nextDescription } : prev));
+      const updated = await updateTap(detailsTap.id, { description: nextDescription });
+      mergeTapIntoActiveLocation(updated);
+      setDetailsTap((prev) => (prev ? { ...prev, ...updated } : prev));
       setIsEditingDescription(false);
       setDescriptionDraft('');
-      loadActiveLocation();
       toast.success('Описание сохранено');
     } catch (err) {
       toast.error('Не удалось сохранить описание');
     } finally {
       setIsSavingDescription(false);
+    }
+  };
+
+  const saveUntappdFields = async () => {
+    if (!detailsTap || !isAdmin) return;
+    setIsSavingUntappd(true);
+    try {
+      const updated = await updateTap(detailsTap.id, {
+        volume_price_text: untappdVolumePrice,
+        bitterness_ibu: untappdIbu,
+        abv_text: untappdAbv,
+      });
+      mergeTapIntoActiveLocation(updated);
+      setDetailsTap((prev) => (prev ? { ...prev, ...updated } : prev));
+      toast.success('Характеристики сохранены');
+    } catch (err) {
+      toast.error('Не удалось сохранить');
+    } finally {
+      setIsSavingUntappd(false);
     }
   };
 
@@ -124,6 +197,50 @@ function TapsPage() {
   useEffect(() => {
     loadActiveLocation();
   }, [activeLocationId, loadActiveLocation]);
+
+  useEffect(() => {
+    if (!isPresentationOpen) return undefined;
+    const el = presentationRef.current;
+    if (!el) return undefined;
+    const req = el.requestFullscreen?.() || el.webkitRequestFullscreen?.();
+    if (req && typeof req.then === 'function') {
+      req.catch(() => {});
+    }
+    const onFsChange = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!fsEl) setIsPresentationOpen(false);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, [isPresentationOpen]);
+
+  useEffect(() => {
+    if (!isPresentationOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+        if (fsEl) {
+          (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+        } else {
+          setIsPresentationOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPresentationOpen]);
+
+  const exitPresentation = useCallback(() => {
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document).catch(() => {});
+    }
+    setIsPresentationOpen(false);
+  }, []);
 
   // Создание новой локации
   const handleCreateLocation = async () => {
@@ -204,8 +321,8 @@ function TapsPage() {
     const { tapId, field } = editingCell;
     
     try {
-      await updateTap(tapId, { [field]: editValue || '' });
-      loadActiveLocation();
+      const updated = await updateTap(tapId, { [field]: editValue || '' });
+      mergeTapIntoActiveLocation(updated);
       setEditingCell(null);
       setEditValue('');
     } catch (err) {
@@ -248,13 +365,15 @@ function TapsPage() {
     }
     
     try {
-      await addAvailableBeer({
+      const created = await addAvailableBeer({
         location: activeLocationId,
         brewery,
         beer_name: beerName,
         price_per_liter: price,
       });
-      loadActiveLocation();
+      setActiveLocation((p) =>
+        p ? { ...p, available_beers: [...(p.available_beers || []), created] } : p,
+      );
       setNewBeerInput('');
       toast.success('Позиция добавлена');
     } catch (err) {
@@ -264,10 +383,14 @@ function TapsPage() {
 
   // Удаление доступного пива
   const handleDeleteAvailableBeer = async (beerId) => {
+    const prevBeers = activeLocation?.available_beers;
+    setActiveLocation((p) =>
+      p ? { ...p, available_beers: (p.available_beers || []).filter((b) => b.id !== beerId) } : p,
+    );
     try {
       await deleteAvailableBeer(beerId);
-      loadActiveLocation();
     } catch (err) {
+      setActiveLocation((p) => (p ? { ...p, available_beers: prevBeers || [] } : p));
       toast.error('Ошибка удаления');
     }
   };
@@ -281,30 +404,120 @@ function TapsPage() {
     e.preventDefault();
   };
 
+  const handleBeerListDragOver = (e) => {
+    e.preventDefault();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch (_) {
+      /* старые браузеры */
+    }
+  };
+
+  const applyBeerSort = useCallback(
+    async (mode) => {
+      if (!activeLocationId || !activeLocation?.available_beers?.length) return;
+      const beers = [...activeLocation.available_beers];
+      const cmpRu = (a, b) =>
+        String(a || '').localeCompare(String(b || ''), 'ru', { sensitivity: 'base' });
+      let sorted;
+      switch (mode) {
+        case 'brewery':
+          sorted = beers.sort(
+            (a, b) => cmpRu(a.brewery, b.brewery) || cmpRu(a.beer_name, b.beer_name),
+          );
+          break;
+        case 'beer':
+          sorted = beers.sort(
+            (a, b) => cmpRu(a.beer_name, b.beer_name) || cmpRu(a.brewery, b.brewery),
+          );
+          break;
+        case 'price_asc':
+          sorted = beers.sort(
+            (a, b) => (Number(a.price_per_liter) || 0) - (Number(b.price_per_liter) || 0),
+          );
+          break;
+        case 'price_desc':
+          sorted = beers.sort(
+            (a, b) => (Number(b.price_per_liter) || 0) - (Number(a.price_per_liter) || 0),
+          );
+          break;
+        case 'recent':
+          sorted = beers.sort(
+            (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0),
+          );
+          break;
+        default:
+          return;
+      }
+      const ids = sorted.map((b) => b.id);
+      try {
+        await reorderAvailableBeers(activeLocationId, ids);
+        setActiveLocation((prev) => (prev ? { ...prev, available_beers: sorted } : prev));
+        toast.success('Порядок обновлён');
+      } catch (err) {
+        toast.error('Не удалось сохранить порядок');
+        await refreshAvailableBeers();
+      }
+    },
+    [activeLocationId, activeLocation, refreshAvailableBeers],
+  );
+
+  const handleBeerReorderDrop = useCallback(
+    async (e, targetBeer) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!activeLocationId) return;
+      if (!draggedBeer || draggedBeer.id === targetBeer.id) return;
+      const list = [...(activeLocation?.available_beers || [])];
+      const from = list.findIndex((b) => b.id === draggedBeer.id);
+      const to = list.findIndex((b) => b.id === targetBeer.id);
+      if (from === -1 || to === -1) return;
+      const nextList = [...list];
+      const [moved] = nextList.splice(from, 1);
+      nextList.splice(to, 0, moved);
+      const ids = nextList.map((b) => b.id);
+      try {
+        await reorderAvailableBeers(activeLocationId, ids);
+        setActiveLocation((prev) => (prev ? { ...prev, available_beers: nextList } : prev));
+        toast.success('Порядок сохранён');
+      } catch (err) {
+        toast.error('Не удалось сохранить порядок');
+        await refreshAvailableBeers();
+      } finally {
+        setDraggedBeer(null);
+      }
+    },
+    [draggedBeer, activeLocation, activeLocationId, refreshAvailableBeers],
+  );
+
   // Унифицированное назначение позиции на слот крана.
   // Используется как из drag-n-drop, так и из click-to-place.
   const assignBeerToTap = useCallback(
     async (beer, tapId, field) => {
       if (!beer) return;
       try {
+        let updated;
         if (field === 'current') {
-          await updateTap(tapId, {
+          updated = await updateTap(tapId, {
             brewery: beer.brewery,
             beer_name: beer.beer_name,
             price_per_liter: beer.price_per_liter,
             description: beer.description || '',
+            volume_price_text: beer.volume_price_text || '',
+            bitterness_ibu: beer.bitterness_ibu || '',
+            abv_text: beer.abv_text || '',
             status: 'active',
           });
         } else {
-          await updateTap(tapId, { [field]: beer.display_name });
+          updated = await updateTap(tapId, { [field]: beer.display_name });
         }
-        loadActiveLocation();
+        mergeTapIntoActiveLocation(updated);
         toast.success('Позиция назначена');
       } catch (err) {
         toast.error('Ошибка обновления');
       }
     },
-    [loadActiveLocation],
+    [mergeTapIntoActiveLocation],
   );
 
   const handleDropOnTap = async (tapId, field) => {
@@ -343,19 +556,31 @@ function TapsPage() {
     
     const query = searchQuery.toLowerCase().trim();
     return activeLocation.taps.filter(tap => {
-      const currentBeer = tap.current_beer || `${tap.brewery} ${tap.beer_name}`.toLowerCase();
+      const currentBeer = (tap.current_beer || `${tap.brewery} ${tap.beer_name}`).toLowerCase();
       const next1 = (tap.next_beer_1 || '').toLowerCase();
       const next2 = (tap.next_beer_2 || '').toLowerCase();
       const brewery = (tap.brewery || '').toLowerCase();
       const beerName = (tap.beer_name || '').toLowerCase();
       
+      const vp = (tap.volume_price_text || '').toLowerCase();
+      const ibu = (tap.bitterness_ibu || '').toLowerCase();
+      const abv = (tap.abv_text || '').toLowerCase();
+      
       return currentBeer.includes(query) || 
              next1.includes(query) || 
              next2.includes(query) ||
              brewery.includes(query) ||
-             beerName.includes(query);
+             beerName.includes(query) ||
+             vp.includes(query) ||
+             ibu.includes(query) ||
+             abv.includes(query);
     });
   }, [activeLocation, searchQuery]);
+
+  const presentationTaps = useMemo(() => {
+    if (!filteredTaps.length) return [];
+    return filteredTaps.filter((t) => t.is_visible !== false);
+  }, [filteredTaps]);
 
   // Сдвиг очереди (текущее -> архив, след1 -> текущее, след2 -> след1)
   const handleShiftQueue = async (tap) => {
@@ -376,16 +601,19 @@ function TapsPage() {
         }
       }
       
-      await updateTap(tap.id, {
+      const updated = await updateTap(tap.id, {
         brewery: newBrewery,
         beer_name: newBeerName,
         price_per_liter: newPrice,
         description: '',
+        volume_price_text: '',
+        bitterness_ibu: '',
+        abv_text: '',
         status: newStatus,
         next_beer_1: tap.next_beer_2 || '',
         next_beer_2: '',
       });
-      loadActiveLocation();
+      mergeTapIntoActiveLocation(updated);
       toast.success('Очередь сдвинута');
     } catch (err) {
       toast.error('Ошибка сдвига');
@@ -411,7 +639,18 @@ function TapsPage() {
           <div className="card">
             <div className="taps-header">
               <h2>Управление кранами</h2>
-              {canAddDeleteLocationsAndTaps && activeLocation && (
+              <div className="taps-header-actions">
+                {activeLocation && activeLocation.taps?.length > 0 && (
+                  <button
+                    type="button"
+                    className="button button-secondary taps-presentation-btn"
+                    onClick={() => setIsPresentationOpen(true)}
+                    title="Полноэкранная доска для монитора или ТВ"
+                  >
+                    На экран
+                  </button>
+                )}
+                {canAddDeleteLocationsAndTaps && activeLocation && (
                 <button
                   className="button button-secondary"
                   onClick={async () => {
@@ -426,7 +665,8 @@ function TapsPage() {
                 >
                   Экспорт в Excel
                 </button>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Табы локаций */}
@@ -484,7 +724,7 @@ function TapsPage() {
             </div>
 
             {/* Легенда цветов — только для редактирования */}
-            {!canOnlyChangeVisibility && (
+            {canEditTapsContent && (
             <div className="color-legend">
               <span className="legend-title">Цвета:</span>
               <div className="legend-item">
@@ -529,13 +769,13 @@ function TapsPage() {
                     <tr>
                       <th className="col-num">№</th>
                       <th className="col-current">Что сейчас</th>
-                      {!canOnlyChangeVisibility && (
+                      {!isReadOnlyTapsUser && (
                         <>
                           <th className="col-next">След 1</th>
                           <th className="col-next">След 2</th>
+                          {canEditTapsContent && <th className="col-actions" aria-label="Действия" />}
                         </>
                       )}
-                      <th className="col-actions">{canOnlyChangeVisibility ? 'Видимость' : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -549,11 +789,10 @@ function TapsPage() {
                           className={`tap-row status-${tap.status} ${tap.is_visible === false ? 'tap-hidden' : ''}`}
                         >
                           <td className="col-num">{tap.position}</td>
-                          {canOnlyChangeVisibility ? (
+                          {isReadOnlyTapsUser ? (
                             <>
                               <td
-                                className="col-current tap-details-trigger"
-                                colSpan={2}
+                                className="col-current tap-details-trigger taps-readonly-cell"
                                 onClick={() => {
                                   if (tap.current_beer || tap.brewery || tap.beer_name) {
                                     setDetailsTap(tap);
@@ -561,24 +800,6 @@ function TapsPage() {
                                 }}
                               >
                                 <span>{tap.current_beer || '—'}</span>
-                              </td>
-                              <td className="col-actions">
-                                <label className="tap-visibility-toggle" title={tap.is_visible !== false ? 'Скрыть' : 'Показать'}>
-                                  <input
-                                    type="checkbox"
-                                    checked={tap.is_visible !== false}
-                                    onChange={async () => {
-                                      try {
-                                        await updateTap(tap.id, { is_visible: !(tap.is_visible !== false) });
-                                        loadActiveLocation();
-                                        toast.success(tap.is_visible !== false ? 'Кран скрыт' : 'Кран показан');
-                                      } catch (err) {
-                                        toast.error('Ошибка');
-                                      }
-                                    }}
-                                  />
-                                  <span>{tap.is_visible !== false ? 'Показан' : 'Скрыт'}</span>
-                                </label>
                               </td>
                             </>
                           ) : (
@@ -597,8 +818,8 @@ function TapsPage() {
                                   const colors = ['', 'blue', 'green'];
                                   const idx = colors.indexOf(tap.color_current || '');
                                   const next = colors[(idx + 1) % colors.length];
-                                  await updateTap(tap.id, { color_current: next });
-                                  loadActiveLocation();
+                                  const updated = await updateTap(tap.id, { color_current: next });
+                                  mergeTapIntoActiveLocation(updated);
                                 }}
                                 title="Клик для смены цвета"
                               />
@@ -625,8 +846,8 @@ function TapsPage() {
                                   const colors = ['', 'blue', 'green'];
                                   const idx = colors.indexOf(tap.color_next1 || '');
                                   const next = colors[(idx + 1) % colors.length];
-                                  await updateTap(tap.id, { color_next1: next });
-                                  loadActiveLocation();
+                                  const updated = await updateTap(tap.id, { color_next1: next });
+                                  mergeTapIntoActiveLocation(updated);
                                 }}
                                 title="Клик для смены цвета"
                               />
@@ -664,8 +885,8 @@ function TapsPage() {
                                   const colors = ['', 'blue', 'green'];
                                   const idx = colors.indexOf(tap.color_next2 || '');
                                   const next = colors[(idx + 1) % colors.length];
-                                  await updateTap(tap.id, { color_next2: next });
-                                  loadActiveLocation();
+                                  const updated = await updateTap(tap.id, { color_next2: next });
+                                  mergeTapIntoActiveLocation(updated);
                                 }}
                                 title="Клик для смены цвета"
                               />
@@ -691,6 +912,21 @@ function TapsPage() {
                           
                           {/* Действия */}
                           <td className="col-actions">
+                            <label className="tap-screen-toggle" title="Показывать на полноэкранной доске">
+                              <input
+                                type="checkbox"
+                                checked={tap.is_visible !== false}
+                                onChange={async (e) => {
+                                  try {
+                                    const updated = await updateTap(tap.id, { is_visible: e.target.checked });
+                                    mergeTapIntoActiveLocation(updated);
+                                  } catch (err) {
+                                    toast.error('Не удалось обновить видимость');
+                                  }
+                                }}
+                              />
+                              <span>Экран</span>
+                            </label>
                             <button
                               className="btn-shift"
                               onClick={() => handleShiftQueue(tap)}
@@ -732,7 +968,7 @@ function TapsPage() {
         </div>
 
         {/* Боковая панель с доступным пивом — только для тех, кто может редактировать краны */}
-        {activeLocation && !canOnlyChangeVisibility && (
+        {activeLocation && canEditTapsContent && (
           <div className={`taps-sidebar${isMobile && !isBeersPanelOpen ? ' taps-sidebar--hidden' : ''}${isMobile ? ' taps-sidebar--mobile' : ''}`}>
             <div className="card">
               <div className="sidebar-head">
@@ -769,6 +1005,32 @@ function TapsPage() {
                 <button onClick={handleAddAvailableBeer}>+</button>
               </div>
 
+              <div className="available-beers-toolbar">
+                <label className="available-beers-sort-label">
+                  <span>Порядок</span>
+                  <select
+                    key={`beer-sort-${activeLocationId}`}
+                    className="available-beers-sort-select"
+                    aria-label="Сортировка списка"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      e.target.value = '';
+                      if (v) applyBeerSort(v);
+                    }}
+                  >
+                    <option value="" disabled>
+                      Сортировать…
+                    </option>
+                    <option value="brewery">Пивоварня А→Я</option>
+                    <option value="beer">Название А→Я</option>
+                    <option value="price_asc">Цена ↑</option>
+                    <option value="price_desc">Цена ↓</option>
+                    <option value="recent">Сначала новые</option>
+                  </select>
+                </label>
+              </div>
+
               <div className="available-beers-list">
                 {activeLocation.available_beers && activeLocation.available_beers.map(beer => {
                   const isSelected = selectedBeer?.id === beer.id;
@@ -776,8 +1038,8 @@ function TapsPage() {
                     <div
                       key={beer.id}
                       className={`available-beer-item${isSelected ? ' available-beer-item--selected' : ''}`}
-                      draggable
-                      onDragStart={() => handleDragStart(beer)}
+                      onDragOver={handleBeerListDragOver}
+                      onDrop={(e) => handleBeerReorderDrop(e, beer)}
                       onClick={() => toggleSelectBeer(beer)}
                       role="button"
                       tabIndex={0}
@@ -788,14 +1050,28 @@ function TapsPage() {
                         }
                       }}
                     >
-                      <span className="drag-handle">⋮⋮</span>
+                      <span
+                        className="drag-handle"
+                        draggable
+                        onClick={(e) => e.stopPropagation()}
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          handleDragStart(beer);
+                        }}
+                        onDragEnd={() => setDraggedBeer(null)}
+                        title="Перетащить на кран или на другую строку для порядка"
+                      >
+                        ⋮⋮
+                      </span>
                       <span className="beer-display">{beer.display_name}</span>
                       <button
+                        type="button"
                         className="delete-beer-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteAvailableBeer(beer.id);
                         }}
+                        title="Удалить позицию"
                       >
                         ×
                       </button>
@@ -812,7 +1088,7 @@ function TapsPage() {
         )}
 
         {/* Floating-кнопка открытия панели доступных позиций — только на мобильном. */}
-        {isMobile && activeLocation && !canOnlyChangeVisibility && !isBeersPanelOpen && (
+        {isMobile && activeLocation && canEditTapsContent && !isBeersPanelOpen && (
           <button
             type="button"
             className="taps-fab"
@@ -872,6 +1148,57 @@ function TapsPage() {
                   <dd>{detailsTap.price_per_liter ? `${Math.round(detailsTap.price_per_liter)} ₽` : 'Не указана'}</dd>
                 </div>
                 <div>
+                  <dt>Объём / цена (экран)</dt>
+                  <dd>
+                    {isAdmin ? (
+                      <input
+                        type="text"
+                        className="tap-details-inline-input"
+                        value={untappdVolumePrice}
+                        onChange={(e) => setUntappdVolumePrice(e.target.value)}
+                        placeholder="Например: 30 л · 420 ₽"
+                        disabled={isSavingUntappd}
+                      />
+                    ) : (
+                      detailsTap.volume_price_text || '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Горечь (IBU)</dt>
+                  <dd>
+                    {isAdmin ? (
+                      <input
+                        type="text"
+                        className="tap-details-inline-input"
+                        value={untappdIbu}
+                        onChange={(e) => setUntappdIbu(e.target.value)}
+                        placeholder="IBU"
+                        disabled={isSavingUntappd}
+                      />
+                    ) : (
+                      detailsTap.bitterness_ibu || '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Алкоголь (ABV)</dt>
+                  <dd>
+                    {isAdmin ? (
+                      <input
+                        type="text"
+                        className="tap-details-inline-input"
+                        value={untappdAbv}
+                        onChange={(e) => setUntappdAbv(e.target.value)}
+                        placeholder="Например: 5.2 %"
+                        disabled={isSavingUntappd}
+                      />
+                    ) : (
+                      detailsTap.abv_text || '—'
+                    )}
+                  </dd>
+                </div>
+                <div>
                   <dt>Описание</dt>
                   {isEditingDescription ? (
                     <dd className="tap-details-description-edit">
@@ -913,7 +1240,20 @@ function TapsPage() {
                 </div>
               </dl>
 
-              {!canOnlyChangeVisibility && !isEditingDescription && (
+              {isAdmin && (
+                <div className="tap-details-untappd-actions">
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={saveUntappdFields}
+                    disabled={isSavingUntappd}
+                  >
+                    {isSavingUntappd ? 'Сохранение…' : 'Сохранить для экрана'}
+                  </button>
+                </div>
+              )}
+
+              {canEditTapsContent && !isEditingDescription && (
                 <div className="tap-details-actions">
                   <button
                     type="button"
@@ -938,6 +1278,64 @@ function TapsPage() {
           </div>
         )}
       </div>
+
+      {isPresentationOpen && (
+        <div
+          ref={presentationRef}
+          className="taps-presentation-root"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Доска кранов"
+        >
+          <button
+            type="button"
+            className="taps-presentation-exit taps-presentation-exit--floating"
+            onClick={exitPresentation}
+            title="Выйти (Esc)"
+            aria-label="Выйти из полноэкранного режима"
+          >
+            Выйти
+          </button>
+          <div className="taps-presentation-grid">
+            {presentationTaps.length === 0 ? (
+              <p className="taps-presentation-empty">
+                Нет позиций для доски: включите «Экран» у кранов в таблице или снимите поиск.
+              </p>
+            ) : (
+              presentationTaps.map((tap) => {
+                const line = tap.current_beer || '—';
+                const { brewery, beer } = splitBeerDisplay(line);
+                return (
+                  <article key={tap.id} className="taps-presentation-card">
+                    <span className="taps-presentation-num" aria-hidden="true">
+                      {tap.position}
+                    </span>
+                    {brewery ? (
+                      <>
+                        <span className="taps-presentation-brewery">{brewery}</span>
+                        <span className="taps-presentation-beer">{beer}</span>
+                      </>
+                    ) : (
+                      <span className="taps-presentation-beer taps-presentation-beer--solo">{beer}</span>
+                    )}
+                    {[tap.volume_price_text, tap.bitterness_ibu, tap.abv_text].filter(Boolean).length > 0 && (
+                      <div className="taps-presentation-meta">
+                        {[tap.volume_price_text, tap.bitterness_ibu, tap.abv_text]
+                          .filter(Boolean)
+                          .map((text, idx) => (
+                            <span key={idx} className="taps-presentation-meta__item">
+                              {text}
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

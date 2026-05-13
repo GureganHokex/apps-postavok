@@ -49,14 +49,7 @@ class IsAdminOrBartender(permissions.BasePermission):
 
 
 class CanEditTapsContent(permissions.BasePermission):
-    """Редактирование кранов (все поля кроме только видимости): admin и bartender."""
+    """Редактирование кранов (все поля, включая видимость на экране): admin и bartender."""
     def has_permission(self, request, view):
         role = get_user_role(request.user)
         return role in (UserProfile.ROLE_ADMIN, UserProfile.ROLE_BARTENDER)
-
-
-class CanChangeTapVisibilityOnly(permissions.BasePermission):
-    """Разрешено менять только видимость крана: user и выше."""
-    def has_permission(self, request, view):
-        role = get_user_role(request.user)
-        return role in (UserProfile.ROLE_ADMIN, UserProfile.ROLE_USER)

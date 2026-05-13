@@ -688,5 +688,16 @@ export const bulkCreateAvailableBeers = async (locationId, items) => {
   return response.data;
 };
 
+/**
+ * Сохранить порядок доступных позиций (все id локации в нужном порядке).
+ */
+export const reorderAvailableBeers = async (locationId, beerIds) => {
+  const response = await api.post('/available-beers/reorder/', {
+    location_id: locationId,
+    beer_ids: beerIds,
+  });
+  return response.data;
+};
+
 export default api;
 

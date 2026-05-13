@@ -695,7 +695,7 @@ class TapsExporter:
         ws.title = "Краны"
         
         # Заголовки
-        headers = ['№', 'Пивоварня', 'Название', 'Цена/л', 'След 1', 'След 2', 'Статус']
+        headers = ['№', 'Пивоварня', 'Название', 'Цена/л', 'Объём/цена', 'IBU', 'ABV', 'След 1', 'След 2', 'Статус']
         ws.append(headers)
         
         # Стили для заголовков
@@ -719,6 +719,9 @@ class TapsExporter:
                 tap.brewery or '',
                 tap.beer_name or '',
                 f"{price:.2f}" if price else '',
+                tap.volume_price_text or '',
+                tap.bitterness_ibu or '',
+                tap.abv_text or '',
                 tap.next_beer_1 or '',
                 tap.next_beer_2 or '',
                 status_display,

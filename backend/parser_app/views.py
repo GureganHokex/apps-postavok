@@ -851,7 +851,7 @@ class TapLocationViewSet(viewsets.ModelViewSet):
 
 
 class TapViewSet(viewsets.ModelViewSet):
-    """ViewSet для работы с кранами. Пользователь может менять только is_visible; бармен и админ — все поля.
+    """ViewSet для работы с кранами. Роль «пользователь» — только чтение; бармен и админ — изменение полей.
     SessionAuthenticationNoCSRF — см. TapLocationViewSet.
     """
     
@@ -867,13 +867,16 @@ class TapViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def update(self, request, *args, **kwargs):
-        """Обновление крана. Для роли user разрешено только поле is_visible."""
+        """Обновление крана. Роль user не может менять краны (видимость настраивает персонал)."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         role = get_user_role(request.user)
-        data = request.data
         if role == UserProfile.ROLE_USER:
-            data = {k: v for k, v in request.data.items() if k == 'is_visible'}
+            return Response(
+                {'detail': 'Недостаточно прав для изменения кранов.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        data = request.data
 
         # Сохраняем старые значения для истории
         old_brewery = instance.brewery
@@ -1036,6 +1039,46 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
         except (TypeError, ValueError):
             return False
 
+    @staticmethod
+    def _volume_price_from_parsed(si: ParsedItem) -> str:
+        parts = []
+        if si.volume is not None:
+            try:
+                v = float(si.volume)
+                parts.append(f'{int(v)} л' if v == int(v) else f'{v:g} л')
+            except (TypeError, ValueError):
+                pass
+        if si.price is not None:
+            try:
+                p = float(si.price)
+                cur = (si.currency or 'RUB').upper()
+                if cur in ('RUB', ''):
+                    parts.append(f'{int(round(p))} ₽')
+                else:
+                    parts.append(f'{p:g} {cur}'.strip())
+            except (TypeError, ValueError):
+                pass
+        fmt = (si.format_type or '').strip()
+        if fmt:
+            parts.append(fmt)
+        return ' · '.join(parts) if parts else ''
+
+    @staticmethod
+    def _ibu_from_parsed(si: ParsedItem) -> str:
+        return (si.ibu or '').strip()[:64]
+
+    @staticmethod
+    def _abv_text_from_parsed(si: ParsedItem) -> str:
+        if si.abv is None:
+            return ''
+        try:
+            a = float(si.abv)
+            if abs(a - round(a)) < 1e-6:
+                return f'{int(round(a))} %'
+            return f'{a:g} %'
+        except (TypeError, ValueError):
+            return ''
+
     def get_queryset(self):
         """Фильтрация по локации если указана."""
         queryset = super().get_queryset()
@@ -1043,6 +1086,58 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
         if location_id:
             queryset = queryset.filter(location_id=location_id)
         return queryset
+
+    def perform_create(self, serializer):
+        loc = serializer.validated_data['location']
+        max_so = AvailableBeer.objects.filter(location=loc).aggregate(m=models.Max('sort_order'))['m']
+        next_so = (max_so + 1) if max_so is not None else 0
+        serializer.save(sort_order=next_so)
+
+    @action(detail=False, methods=['post'])
+    def reorder(self, request):
+        """
+        Сохранить порядок доступных позиций для локации.
+
+        POST /api/available-beers/reorder/
+        Body: {"location_id": 1, "beer_ids": [3, 1, 2, ...]} — все id позиций локации в нужном порядке.
+        """
+        location_id = request.data.get('location_id')
+        beer_ids = request.data.get('beer_ids', [])
+        if not location_id or not beer_ids:
+            return Response(
+                {'error': 'location_id и beer_ids обязательны'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            loc_id_int = int(location_id)
+            ordered_ids = [int(x) for x in beer_ids]
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'location_id и элементы beer_ids должны быть числами'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(ordered_ids) != len(set(ordered_ids)):
+            return Response(
+                {'error': 'beer_ids не должны содержать дубликатов'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        beers = list(AvailableBeer.objects.filter(location_id=loc_id_int))
+        if len(beers) != len(ordered_ids):
+            return Response(
+                {'error': f'Ожидалось {len(beers)} id позиций локации, передано {len(ordered_ids)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        by_id = {b.id for b in beers}
+        if set(ordered_ids) != by_id:
+            return Response(
+                {'error': 'beer_ids должны совпадать с позициями выбранной локации'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pos = {bid: i for i, bid in enumerate(ordered_ids)}
+        for b in beers:
+            b.sort_order = pos[b.id]
+        AvailableBeer.objects.bulk_update(beers, ['sort_order'], batch_size=200)
+        return Response({'status': 'ok'})
     
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
@@ -1083,6 +1178,11 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
                     continue
             source_map = ParsedItem.objects.in_bulk(source_ids) if source_ids else {}
 
+            max_so = AvailableBeer.objects.filter(location_id=location_id).aggregate(
+                m=models.Max('sort_order')
+            )['m']
+            next_sort = (max_so + 1) if max_so is not None else 0
+
             created = []
             for item in items:
                 source_item_id = item.get('source_item_id')
@@ -1103,14 +1203,30 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
                         price = Decimal(str(price))
                     except (ValueError, TypeError):
                         price = None
-                
+
+                vp = (item.get('volume_price_text') or '').strip()[:200]
+                ibu = (item.get('bitterness_ibu') or '').strip()[:64]
+                abv = (item.get('abv_text') or '').strip()[:32]
+                if source_item is not None:
+                    if not vp:
+                        vp = self._volume_price_from_parsed(source_item)[:200]
+                    if not ibu:
+                        ibu = self._ibu_from_parsed(source_item)
+                    if not abv:
+                        abv = self._abv_text_from_parsed(source_item)[:32]
+
                 beer = AvailableBeer.objects.create(
                     location_id=location_id,
                     brewery=item.get('brewery', ''),
                     beer_name=item.get('beer_name', ''),
                     price_per_liter=price,
                     description=item.get('description') or (source_item.description if source_item else ''),
+                    volume_price_text=vp,
+                    bitterness_ibu=ibu,
+                    abv_text=abv,
+                    sort_order=next_sort,
                 )
+                next_sort += 1
                 created.append(beer)
             
             serializer = AvailableBeerSerializer(created, many=True)

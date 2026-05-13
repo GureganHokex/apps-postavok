@@ -305,12 +305,40 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   }, [eligibleKegsForTaps]);
 
   const buildKegPayloadForTaps = useCallback((kegs) => {
-    return kegs.map(item => ({
+    const volumePriceFromItem = (item) => {
+      const parts = [];
+      if (item.volume != null && item.volume !== '') {
+        const v = Number(item.volume);
+        if (!Number.isNaN(v)) {
+          parts.push(Number.isInteger(v) ? `${v} л` : `${v} л`);
+        }
+      }
+      if (item.price != null && item.price !== '') {
+        const p = Number(item.price);
+        if (!Number.isNaN(p)) {
+          parts.push(`${Math.round(p)} ₽`);
+        }
+      }
+      if (item.format_type && String(item.format_type).trim()) {
+        parts.push(String(item.format_type).trim());
+      }
+      return parts.join(' · ');
+    };
+    const abvFromItem = (item) => {
+      if (item.abv == null || item.abv === '') return '';
+      const a = Number(item.abv);
+      if (Number.isNaN(a)) return String(item.abv).trim();
+      return `${Number.isInteger(a) || Math.abs(a - Math.round(a)) < 1e-6 ? Math.round(a) : a} %`;
+    };
+    return kegs.map((item) => ({
       source_item_id: item.id,
       brewery: item.brewery || '',
       beer_name: item.beer_name || '',
       price_per_liter: item.price || null,
       description: item.description || '',
+      volume_price_text: volumePriceFromItem(item),
+      bitterness_ibu: (item.ibu && String(item.ibu).trim()) || '',
+      abv_text: abvFromItem(item),
     }));
   }, []);
 

@@ -338,8 +338,11 @@
 }
 
 .col-actions {
-  width: 80px;
+  min-width: 118px;
+  width: auto;
+  max-width: 140px;
   text-align: center !important;
+  vertical-align: middle;
 }
 
 
@@ -573,6 +576,34 @@ td:hover .clear-btn {
   background: var(--accent-hover);
 }
 
+/* Панель сортировки доступных позиций */
+.available-beers-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.available-beers-sort-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.available-beers-sort-select {
+  min-width: 160px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
 /* Список доступного пива */
 .available-beers-list {
   max-height: 500px;
@@ -588,7 +619,7 @@ td:hover .clear-btn {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-bottom: 8px;
-  cursor: grab;
+  cursor: pointer;
   transition: all 0.2s;
 }
 
@@ -605,6 +636,13 @@ td:hover .clear-btn {
   color: var(--text-secondary);
   font-size: 0.9rem;
   user-select: none;
+  cursor: grab;
+  flex-shrink: 0;
+  padding: 4px 2px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .beer-display {
@@ -614,18 +652,23 @@ td:hover .clear-btn {
 }
 
 .delete-beer-btn {
-  background: none;
-  border: none;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
-  font-size: 1rem;
-  padding: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  font-size: 1.1rem;
+  line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px;
+  flex-shrink: 0;
 }
 
 .available-beer-item:hover .delete-beer-btn {
-  opacity: 0.5;
+  opacity: 1;
 }
 
 .delete-beer-btn:hover {
@@ -1200,4 +1243,182 @@ td:hover .clear-btn {
   .col-next {
     min-width: 115px;
   }
+}
+
+/* Шапка: кнопки справа */
+.taps-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Режим только чтения для роли user */
+.taps-readonly-cell {
+  cursor: default;
+  user-select: text;
+}
+
+.tap-details-trigger.taps-readonly-cell {
+  cursor: pointer;
+}
+
+.tap-screen-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tap-screen-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.tap-screen-toggle span {
+  white-space: nowrap;
+}
+
+/* Полноэкранная доска (Untappd-подобная) */
+.taps-presentation-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  box-sizing: border-box;
+  background: linear-gradient(165deg, #0c0a08 0%, #1c1712 42%, #0e0c0a 100%);
+  color: #f8f1e7;
+  display: block;
+  padding: clamp(16px, 2.5vw, 40px);
+  padding-top: max(clamp(16px, 2.5vw, 40px), env(safe-area-inset-top));
+  overflow: auto;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.taps-presentation-exit {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 200, 120, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffe8c8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.taps-presentation-exit--floating {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 2;
+  opacity: 0.42;
+}
+
+.taps-presentation-exit--floating:hover,
+.taps-presentation-exit--floating:focus-visible {
+  opacity: 1;
+  background: rgba(255, 200, 120, 0.12);
+  border-color: rgba(255, 200, 120, 0.55);
+}
+
+.taps-presentation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: clamp(12px, 1.8vw, 22px);
+  align-content: start;
+  min-height: min(100%, 100vh);
+}
+
+.taps-presentation-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  opacity: 0.65;
+  line-height: 1.5;
+}
+
+.taps-presentation-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 180, 90, 0.2);
+  border-radius: 18px;
+  padding: clamp(16px, 2vw, 26px) clamp(18px, 2.2vw, 28px);
+  padding-left: clamp(48px, 5vw, 62px);
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.taps-presentation-num {
+  position: absolute;
+  left: clamp(12px, 1.6vw, 20px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: clamp(1.6rem, 3.2vw, 2.35rem);
+  font-weight: 800;
+  color: #ffb347;
+  line-height: 1;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.taps-presentation-brewery {
+  font-size: clamp(0.78rem, 1.25vw, 0.95rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 224, 180, 0.72);
+}
+
+.taps-presentation-beer {
+  font-size: clamp(1.05rem, 2.1vw, 1.55rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fffaf3;
+}
+
+.taps-presentation-beer--solo {
+  font-size: clamp(1.15rem, 2.3vw, 1.65rem);
+}
+
+.taps-presentation-meta {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: clamp(0.78rem, 1.25vw, 0.95rem);
+  color: rgba(255, 235, 200, 0.78);
+}
+
+.taps-presentation-meta__item:not(:last-child)::after {
+  content: '·';
+  margin-left: 0.75rem;
+  opacity: 0.5;
+}
+
+.tap-details-inline-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.tap-details-untappd-actions {
+  margin-top: 12px;
+  margin-bottom: 8px;
 }

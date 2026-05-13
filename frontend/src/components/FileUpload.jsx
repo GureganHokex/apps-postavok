@@ -28,7 +28,10 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
-  const progressIntervalRef = useRef(null);
+  const progressPollTimerRef = useRef(null);
+  /** Подряд 502/503/504 от прокси Vercel→Render — для backoff и одного предупреждения пользователю. */
+  const gatewayErrorStreakRef = useRef(0);
+  const gatewayUserWarnedRef = useRef(false);
   /** Защита от двойного завершения: и по polling, и по ответу POST /parse/. */
   const parseDoneRef = useRef(false);
 
@@ -74,17 +77,32 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
 
   const handleParse = async (fileData, supplierInfo = null) => {
     parseDoneRef.current = false;
-    // Очищаем предыдущий interval если есть
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
+    if (progressPollTimerRef.current) {
+      clearTimeout(progressPollTimerRef.current);
+      progressPollTimerRef.current = null;
     }
+    gatewayErrorStreakRef.current = 0;
+    gatewayUserWarnedRef.current = false;
 
     const stopProgressPolling = () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
+      if (progressPollTimerRef.current) {
+        clearTimeout(progressPollTimerRef.current);
+        progressPollTimerRef.current = null;
       }
+    };
+
+    /** Объявление выше assign — иначе scheduleProgressPoll ссылается на функцию до const (eslint no-undef). */
+    let runProgressPoll;
+
+    const scheduleProgressPoll = (delayMs) => {
+      if (parseDoneRef.current) return;
+      if (progressPollTimerRef.current) {
+        clearTimeout(progressPollTimerRef.current);
+      }
+      progressPollTimerRef.current = setTimeout(() => {
+        progressPollTimerRef.current = null;
+        runProgressPoll();
+      }, delayMs);
     };
 
     const finalizeParseSuccess = async (totalItemsHint) => {
@@ -170,22 +188,21 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
           toast.error(msg);
         });
 
-      // Polling для получения прогресса
+      // Polling прогресса: setTimeout-цепочка (интервал меняется при 502/503/504 с прокси).
       let notStartedCount = 0;
-      progressIntervalRef.current = setInterval(async () => {
+
+      runProgressPoll = async () => {
         if (parseDoneRef.current) return;
         try {
           const progress = await getParseProgress(fileData.id);
+          gatewayErrorStreakRef.current = 0;
 
           if (progress.status === 'not_started') {
             if (progress.is_running === false) {
-              // Бэкенд может очистить ключ прогресса раньше, чем UI поймал completed.
-              // Если lock снят, считаем, что процесс уже завершился и подтягиваем фактические данные.
               await finalizeParseSuccess(progress.total_items);
               return;
             }
             notStartedCount++;
-            // Долгий POST на одном воркере: not_started может держаться минуты — не обрываем через 3 с.
             if (notStartedCount > 600) {
               stopProgressPolling();
               if (!parseDoneRef.current) {
@@ -196,6 +213,7 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
               }
               return;
             }
+            scheduleProgressPoll(550);
             return;
           }
 
@@ -215,7 +233,10 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
               setError(progress.message || 'Ошибка парсинга');
               toast.error(progress.message || 'Ошибка парсинга');
             }
+            return;
           }
+
+          scheduleProgressPoll(550);
         } catch (err) {
           const status = err.response?.status;
           if (status === 404) {
@@ -228,11 +249,39 @@ function FileUpload({ onFileUploaded, onParseComplete }) {
             }
             return;
           }
-          console.warn('Progress polling (продолжаем ждать):', err.message || status || err);
-        }
-      }, 500);
 
-      // Только отключаем poll через 20 мин — итог всё равно придёт по POST /parse/ (таймаут в api.js).
+          const isGateway = status === 502 || status === 503 || status === 504;
+          if (isGateway) {
+            gatewayErrorStreakRef.current += 1;
+            const streak = gatewayErrorStreakRef.current;
+            const delayMs = Math.min(8000, Math.round(550 * 2 ** Math.min(streak - 1, 4)));
+            if (streak === 1 || streak % 6 === 0) {
+              console.warn('Progress polling (продолжаем ждать):', err.message || status || err);
+            }
+            if (streak >= 5 && !gatewayUserWarnedRef.current) {
+              gatewayUserWarnedRef.current = true;
+              setParseMessage(
+                'Нестабильная связь с сервером (ошибка шлюза). Парсинг на backend может продолжаться — ' +
+                  'обновите страницу и вкладку «Позиции». При частых сбоях: в Vercel задайте REACT_APP_FORCE_API_URL=1 и REACT_APP_API_URL на URL API Render (см. README).'
+              );
+              toast.error(
+                'Шлюз Vercel→Render не отвечает на опрос прогресса. Подождите или обновите страницу; для стабильности — прямой REACT_APP_API_URL на Render.',
+                { duration: 8000 }
+              );
+            }
+            scheduleProgressPoll(delayMs);
+            return;
+          }
+
+          gatewayErrorStreakRef.current = 0;
+          console.warn('Progress polling (продолжаем ждать):', err.message || status || err);
+          scheduleProgressPoll(550);
+        }
+      };
+
+      scheduleProgressPoll(300);
+
+      // Отключаем poll через 20 мин — снижаем нагрузку, если вкладка оставлена в подвешенном состоянии.
       setTimeout(() => {
         if (parseDoneRef.current) return;
         stopProgressPolling();

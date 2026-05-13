@@ -335,3 +335,140 @@
   font-size: var(--font-sm);
 }
 
+/* === Адаптив === */
+
+/* Планшет: фильтры остаются в ряд, но даём wrap. */
+@media (max-width: 1024px) {
+  .OrdersHistory .orders-filters input {
+    min-width: 160px;
+  }
+}
+
+/* Мобильный: всё в одну колонку, модалка на полный экран. */
+@media (max-width: 768px) {
+  .OrdersHistory .orders-filters {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .OrdersHistory .orders-filters input,
+  .OrdersHistory .orders-filters button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .OrdersHistory .orders-stats {
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+  }
+
+  .OrdersHistory .orders-list {
+    /* На мобиле карточки идут в один столбец и используют всю ширину. */
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .OrdersHistory .order-card {
+    padding: var(--spacing-md);
+  }
+
+  .OrdersHistory .order-card:hover {
+    /* На тач-устройствах :hover ведёт себя странно (липкий). Отключаем. */
+    transform: none;
+  }
+
+  .OrdersHistory .order-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    padding-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .OrdersHistory .order-details {
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+  }
+
+  .OrdersHistory .order-actions {
+    width: 100%;
+  }
+
+  .OrdersHistory .order-actions button {
+    flex: 1 1 calc(50% - var(--spacing-sm));
+    min-width: 0;
+    min-height: var(--tap-target);
+    padding: var(--spacing-sm) var(--spacing-sm);
+  }
+
+  /*
+   * Модалка деталей заказа: на мобильном — bottom sheet,
+   * почти полный экран, но с верхним отступом и закруглением.
+   */
+  .OrdersHistory .order-modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .OrdersHistory .order-modal-content {
+    max-width: 100%;
+    width: 100%;
+    max-height: calc(100vh - 64px - var(--safe-bottom));
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: var(--safe-bottom);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .OrdersHistory .modal-header {
+    padding: var(--spacing-md);
+    position: sticky;
+    top: 0;
+    background-color: var(--bg-primary);
+    z-index: 1;
+  }
+
+  .OrdersHistory .modal-header h2 {
+    font-size: var(--font-lg);
+  }
+
+  .OrdersHistory .modal-close {
+    min-width: var(--tap-target);
+    min-height: var(--tap-target);
+    font-size: var(--font-2xl);
+  }
+
+  .OrdersHistory .modal-body {
+    padding: var(--spacing-md);
+  }
+
+  /* Расширенная статистика — карточки сводки в 2 колонки. */
+  .OrdersHistory .orders-extended-stats {
+    padding: var(--spacing-md);
+  }
+
+  .OrdersHistory .stats-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm);
+  }
+
+  .OrdersHistory .stats-table {
+    /* Не пытаемся ужать колонки — лучше горизонтальный скролл. */
+    min-width: 480px;
+  }
+
+  .OrdersHistory .stats-table th,
+  .OrdersHistory .stats-table td {
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .OrdersHistory .stats-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .OrdersHistory .order-actions button {
+    flex: 1 1 100%;
+  }
+}
+

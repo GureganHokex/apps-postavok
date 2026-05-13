@@ -31,6 +31,8 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   const [locations, setLocations] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
   const [autoSendToTaps, setAutoSendToTaps] = useState(false);
+  const [selectedKegIdsForTaps, setSelectedKegIdsForTaps] = useState([]);
+  const [kegSelectionTouched, setKegSelectionTouched] = useState(false);
 
   // Определяем, похоже ли на кегу
   const isKeg = useCallback((item) => {
@@ -180,22 +182,13 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       // Автоматически отправляем кеги на краны, если включена опция
       if (autoSendToTaps && selectedLocationId) {
         try {
-          const kegsToSend = orderItems
-            .filter(item => {
-              const qty = quantities[item.id] || 0;
-              if (qty <= 0) return false;
-              return isKeg(item);
-            })
-            .map(item => ({
-              source_item_id: item.id,
-              brewery: item.brewery || '',
-              beer_name: item.beer_name || '',
-              price_per_liter: item.price || null,
-            }));
+          const kegsToSend = buildKegPayloadForTaps(selectedKegsForTaps);
 
           if (kegsToSend.length > 0) {
             await bulkCreateAvailableBeers(selectedLocationId, kegsToSend);
             toast.success(`${kegsToSend.length} кег автоматически добавлено в доступные`);
+          } else {
+            toast('Заказ создан, но кеги для кранов не выбраны');
           }
         } catch (err) {
           console.error('Ошибка автоматической отправки кегов:', err);
@@ -274,6 +267,53 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   }, 0);
   }, [orderItems, getItemTotal]);
 
+  const eligibleKegsForTaps = useMemo(() => {
+    return orderItems.filter((item) => {
+      const qty = quantities[item.id] || 0;
+      return qty > 0 && isKeg(item);
+    });
+  }, [orderItems, quantities, isKeg]);
+
+  const selectedKegsForTaps = useMemo(() => {
+    const selectedSet = new Set(selectedKegIdsForTaps.map(Number));
+    return eligibleKegsForTaps.filter((item) => selectedSet.has(Number(item.id)));
+  }, [eligibleKegsForTaps, selectedKegIdsForTaps]);
+
+  useEffect(() => {
+    const eligibleIds = eligibleKegsForTaps.map((item) => Number(item.id));
+    if (!kegSelectionTouched) {
+      setSelectedKegIdsForTaps(eligibleIds);
+      return;
+    }
+    setSelectedKegIdsForTaps((prev) => prev.filter((id) => eligibleIds.includes(Number(id))));
+  }, [eligibleKegsForTaps, kegSelectionTouched]);
+
+  const toggleKegForTaps = useCallback((itemId, checked) => {
+    setKegSelectionTouched(true);
+    setSelectedKegIdsForTaps((prev) => {
+      const normalizedId = Number(itemId);
+      if (checked) {
+        return prev.includes(normalizedId) ? prev : [...prev, normalizedId];
+      }
+      return prev.filter((id) => Number(id) !== normalizedId);
+    });
+  }, []);
+
+  const selectAllKegsForTaps = useCallback((checked) => {
+    setKegSelectionTouched(true);
+    setSelectedKegIdsForTaps(checked ? eligibleKegsForTaps.map((item) => Number(item.id)) : []);
+  }, [eligibleKegsForTaps]);
+
+  const buildKegPayloadForTaps = useCallback((kegs) => {
+    return kegs.map(item => ({
+      source_item_id: item.id,
+      brewery: item.brewery || '',
+      beer_name: item.beer_name || '',
+      price_per_liter: item.price || null,
+      description: item.description || '',
+    }));
+  }, []);
+
   // Видимые элементы с учётом фильтра "только с количеством > 0"
   const visibleOrderItems = useMemo(() => {
     if (!showOnlyWithQty) return orderItems;
@@ -335,19 +375,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       return;
     }
 
-    // Фильтруем только кеги (format_type содержит 'кег' или 'keg' или объем >= 10л)
-    const kegsToSend = orderItems
-      .filter(item => {
-        const qty = quantities[item.id] || 0;
-        if (qty <= 0) return false;
-        return isKeg(item);
-      })
-      .map(item => ({
-        source_item_id: item.id,
-        brewery: item.brewery || '',
-        beer_name: item.beer_name || '',
-        price_per_liter: item.price || null,
-      }));
+    const kegsToSend = buildKegPayloadForTaps(selectedKegsForTaps);
 
     if (kegsToSend.length === 0) {
       toast.error('Нет кег для отправки на краны');
@@ -363,7 +391,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       const errorMsg = err.response?.data?.error || err.message || 'Ошибка отправки на краны';
       toast.error(errorMsg);
     }
-  }, [orderItems, quantities, selectedLocationId, isKeg]);
+  }, [selectedLocationId, selectedKegsForTaps, buildKegPayloadForTaps]);
 
   return (
     <div className="OrderForm">
@@ -405,7 +433,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
                 className="button button-secondary"
                 onClick={handleSaveAsTemplate}
               >
-                💾 Сохранить как шаблон
+                Сохранить как шаблон
               </button>
             )}
 
@@ -488,9 +516,55 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
               </table>
             </div>
 
+            {eligibleKegsForTaps.length > 0 && (
+              <div className="keg-selection-panel">
+                <div className="keg-selection-header">
+                  <div>
+                    <h3>Кеги для добавления на краны</h3>
+                    <p>
+                      Отметьте только те кеги, которые должны попасть в список доступных позиций
+                      на вкладке «Краны».
+                    </p>
+                  </div>
+                  <label className="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={
+                        eligibleKegsForTaps.length > 0 &&
+                        selectedKegsForTaps.length === eligibleKegsForTaps.length
+                      }
+                      onChange={(e) => selectAllKegsForTaps(e.target.checked)}
+                    />
+                    <span>Выбрать все</span>
+                  </label>
+                </div>
+                <div className="keg-selection-list">
+                  {eligibleKegsForTaps.map((item) => (
+                    <label key={item.id} className="keg-selection-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedKegIdsForTaps.includes(Number(item.id))}
+                        onChange={(e) => toggleKegForTaps(item.id, e.target.checked)}
+                      />
+                      <span className="keg-selection-title">
+                        {(item.brewery || 'Без пивоварни')} | {(item.beer_name || 'Без названия')}
+                      </span>
+                      <span className="keg-selection-meta">
+                        {item.volume ? `${item.volume} л` : 'Объём не указан'}
+                        {item.price ? `, ${Math.round(item.price)} ₽` : ''}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="keg-selection-summary">
+                  Выбрано для кранов: {selectedKegsForTaps.length} из {eligibleKegsForTaps.length}
+                </div>
+              </div>
+            )}
+
             <div className="order-actions">
               {/* Автоматическая отправка кегов на краны */}
-              {totalItems > 0 && (
+              {eligibleKegsForTaps.length > 0 && (
                 <div className="auto-send-option">
                   <label className="checkbox-label">
                     <input
@@ -550,7 +624,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
                 disabled={totalItems === 0}
                 title="Отправить кеги в список доступных для кранов"
               >
-                🍺 На краны
+                Добавить на краны
               </button>
             </div>
 
@@ -575,30 +649,38 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
                   </div>
 
                   <div className="modal-preview">
-                    <strong>Будут добавлены кеги:</strong>
-                    <ul>
-                      {orderItems
-                        .filter(item => {
-                          const qty = quantities[item.id] || 0;
-                          if (qty <= 0) return false;
-                          return isKeg(item);
-                        })
-                        .map(item => (
-                          <li key={item.id}>
-                            {item.brewery} | {item.beer_name}
-                            {item.price && `(${Math.round(item.price)})`}
-                          </li>
-                        ))
-                      }
-                    </ul>
+                    <strong>Выберите кеги для добавления:</strong>
+                    {eligibleKegsForTaps.length === 0 ? (
+                      <p>Нет кег с количеством больше 0.</p>
+                    ) : (
+                      <div className="modal-keg-list">
+                        {eligibleKegsForTaps.map(item => (
+                          <label key={item.id} className="modal-keg-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedKegIdsForTaps.includes(Number(item.id))}
+                              onChange={(e) => toggleKegForTaps(item.id, e.target.checked)}
+                            />
+                            <span>
+                              {item.brewery} | {item.beer_name}
+                              {item.price && ` (${Math.round(item.price)} ₽)`}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="modal-actions">
                     <button className="button button-secondary" onClick={() => setShowTapsModal(false)}>
                       Отмена
                     </button>
-                    <button className="button button-success" onClick={handleSendToTaps}>
-                      Добавить
+                    <button
+                      className="button button-success"
+                      onClick={handleSendToTaps}
+                      disabled={selectedKegsForTaps.length === 0}
+                    >
+                      Добавить выбранные
                     </button>
                   </div>
                 </div>

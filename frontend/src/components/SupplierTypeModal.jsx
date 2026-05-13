@@ -115,7 +115,7 @@ function SupplierTypeModal({ isOpen, fileName, onConfirm, onCancel }) {
                 onChange={(e) => setSupplierType(e.target.value)}
               />
               <div className="option-content">
-                <div className="option-icon">🏢</div>
+                <div className="option-icon">П</div>
                 <div className="option-text">
                   <div className="option-title">Дистрибьютор</div>
                   <div className="option-description">
@@ -134,7 +134,7 @@ function SupplierTypeModal({ isOpen, fileName, onConfirm, onCancel }) {
                 onChange={(e) => setSupplierType(e.target.value)}
               />
               <div className="option-content">
-                <div className="option-icon">🍺</div>
+                <div className="option-icon">Б</div>
                 <div className="option-text">
                   <div className="option-title">Частный поставщик</div>
                   <div className="option-description">

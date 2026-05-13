@@ -41,3 +41,21 @@
   color: var(--color-text-secondary, #6c757d);
   opacity: 0.7;
 }
+
+@media (max-width: 768px) {
+  .context-menu {
+    min-width: 220px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .context-menu-item {
+    padding: 0.9rem 1rem;
+    min-height: var(--tap-target);
+    font-size: var(--font-base);
+  }
+
+  /* Подсказки клавиатурных шортcuts на мобильном бесполезны. */
+  .context-menu-shortcut {
+    display: none;
+  }
+}

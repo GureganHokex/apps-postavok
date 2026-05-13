@@ -108,3 +108,43 @@
   margin: 0 var(--spacing-md);
 }
 
+/* === Адаптив === */
+
+@media (max-width: 768px) {
+  .dropzone {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+
+  .dropzone:hover {
+    /* На тач-устройстве hover-эффект "залипает" — отключаем сдвиг. */
+    transform: none;
+  }
+
+  .dropzone p {
+    font-size: var(--font-base);
+  }
+
+  .file-item {
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .file-item span:first-child {
+    flex: 1 1 100%;
+    word-break: break-word;
+    font-size: var(--font-sm);
+  }
+
+  .file-type {
+    margin: 0;
+    flex: 0 0 auto;
+  }
+
+  .file-item button {
+    flex: 1 1 auto;
+    min-height: var(--tap-target);
+  }
+}
+

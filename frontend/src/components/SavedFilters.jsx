@@ -61,7 +61,7 @@ export function SavedFilters({ currentFilters, onApplyFilter }) {
           onClick={() => setShowModal(true)}
           title="Сохранить текущие фильтры"
         >
-          💾 Сохранить
+          Сохранить
         </button>
       </div>
 
@@ -88,7 +88,7 @@ export function SavedFilters({ currentFilters, onApplyFilter }) {
                   onClick={() => handleDeleteFilter(filter.id)}
                   title="Удалить фильтр"
                 >
-                  ✕
+                  Удалить
                 </button>
               </motion.div>
             ))}
@@ -106,7 +106,7 @@ export function SavedFilters({ currentFilters, onApplyFilter }) {
           >
             <div className="modal-header">
               <h3>Сохранить фильтр</h3>
-              <button onClick={() => setShowModal(false)}>✕</button>
+              <button onClick={() => setShowModal(false)}>Закрыть</button>
             </div>
             <div className="modal-content">
               <input

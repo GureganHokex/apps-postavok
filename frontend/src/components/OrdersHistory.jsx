@@ -368,7 +368,7 @@ function OrdersHistory() {
                           onClick={() => handleDuplicateOrder(order.id)}
                           title="Создать копию этого заказа"
                         >
-                          🔄 Повторить
+                          Повторить
                         </button>
                         <button
                           className="button button-success"
@@ -404,7 +404,7 @@ function OrdersHistory() {
                   className="modal-close"
                   onClick={() => setSelectedOrder(null)}
                 >
-                  ✕
+                  Закрыть
                 </button>
               </div>
               <div className="modal-body">

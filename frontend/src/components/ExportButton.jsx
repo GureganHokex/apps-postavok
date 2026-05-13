@@ -67,7 +67,7 @@ export function ExportButton({ data, filename = 'export', formats = ['csv', 'jso
         onClick={() => setIsOpen(!isOpen)}
         title="Экспорт данных"
       >
-        📥 Экспорт
+        Экспорт
       </button>
       {isOpen && (
         <div className="export-menu">

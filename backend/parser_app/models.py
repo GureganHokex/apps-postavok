@@ -554,6 +554,11 @@ class Tap(models.Model):
         null=True,
         verbose_name='Цена за литр'
     )
+    description = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Описание кеги'
+    )
     # Очередь - следующие позиции
     next_beer_1 = models.CharField(
         max_length=500,
@@ -633,6 +638,11 @@ class AvailableBeer(models.Model):
         blank=True,
         null=True,
         verbose_name='Цена за литр'
+    )
+    description = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Описание кеги'
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

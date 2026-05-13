@@ -32,7 +32,7 @@ export function ColumnSettings({ columns, visibleColumns, onToggleVisibility, on
           onClick={() => setIsOpen(!isOpen)}
           title="Настройки колонок"
         >
-          ⚙️
+          Колонки
         </button>
       </div>
       {isOpen && (
@@ -41,7 +41,7 @@ export function ColumnSettings({ columns, visibleColumns, onToggleVisibility, on
           <div className="column-settings-panel">
             <div className="panel-header">
               <h3>Настройки колонок</h3>
-              <button onClick={() => setIsOpen(false)}>✕</button>
+              <button onClick={() => setIsOpen(false)}>Закрыть</button>
             </div>
             <div className="panel-content">
               <div className="columns-list">

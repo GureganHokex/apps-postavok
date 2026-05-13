@@ -155,3 +155,65 @@
   cursor: not-allowed;
 }
 
+/* === Адаптив === */
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    /* Учитываем safe-area и нашу нижнюю навигацию. */
+    padding: max(var(--safe-top), 8px) 8px max(var(--safe-bottom), 8px);
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - 16px);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .modal-content h2 {
+    font-size: var(--font-lg);
+  }
+
+  .option-card {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .option-card:hover {
+    transform: none;
+  }
+
+  .option-icon {
+    width: 40px;
+    height: 40px;
+    font-size: var(--font-xl);
+  }
+
+  .option-title {
+    font-size: var(--font-sm);
+  }
+
+  .option-description {
+    font-size: var(--font-xs);
+  }
+
+  .supplier-profile-section .select,
+  .brewery-input-section input,
+  .brewery-input-section select {
+    min-height: var(--tap-target);
+    font-size: 16px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+  }
+
+  .modal-actions .button {
+    width: 100%;
+    min-height: var(--tap-target);
+  }
+}
+

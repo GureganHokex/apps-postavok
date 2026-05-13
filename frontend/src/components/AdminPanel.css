@@ -159,3 +159,165 @@
 .admin-panel-edit-form .admin-panel-form-grid {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
+
+/* === Карточки пользователей (мобильный режим) === */
+
+.admin-panel-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.admin-panel-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-panel-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.admin-panel-card-title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.admin-panel-role-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.admin-panel-role-badge--admin {
+  background: rgba(231, 76, 60, 0.12);
+  color: var(--danger-color);
+}
+
+.admin-panel-role-badge--bartender {
+  background: rgba(52, 152, 219, 0.12);
+  color: var(--primary-color);
+}
+
+.admin-panel-role-badge--user {
+  background: rgba(39, 174, 96, 0.12);
+  color: var(--success-color);
+}
+
+.admin-panel-card-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.admin-panel-card-fields > div {
+  min-width: 0;
+}
+
+.admin-panel-card-fields__full {
+  grid-column: 1 / -1;
+}
+
+.admin-panel-card-fields dt {
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+  margin: 0 0 2px 0;
+}
+
+.admin-panel-card-fields dd {
+  margin: 0;
+  font-size: var(--font-base);
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.admin-panel-card-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.admin-panel-card-actions button {
+  flex: 1 1 0;
+  min-height: var(--tap-target);
+  margin: 0;
+}
+
+.admin-panel-empty {
+  padding: var(--spacing-xl) var(--spacing-md);
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+/* === Адаптив === */
+
+@media (max-width: 768px) {
+  .admin-panel {
+    padding: var(--spacing-md);
+  }
+
+  .admin-panel-header h2 {
+    font-size: var(--font-xl);
+  }
+
+  .admin-panel-btn-add {
+    width: 100%;
+    min-height: var(--tap-target);
+  }
+
+  .admin-panel-form,
+  .admin-panel-edit-form {
+    padding: var(--spacing-md);
+  }
+
+  .admin-panel-form-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .admin-panel-form-grid input,
+  .admin-panel-form-grid select {
+    padding: 0.65rem 0.75rem;
+    min-height: var(--tap-target);
+  }
+
+  .admin-panel-form-actions {
+    flex-direction: column;
+  }
+
+  .admin-panel-form-actions button {
+    width: 100%;
+    min-height: var(--tap-target);
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-panel-card-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-panel-card-fields__full {
+    grid-column: auto;
+  }
+}

@@ -795,6 +795,7 @@ class TapLocationViewSet(viewsets.ModelViewSet):
                     'brewery': parsed_item.brewery or '',
                     'beer_name': parsed_item.beer_name or '',
                     'price_per_liter': parsed_item.price,
+                    'description': parsed_item.description or '',
                 }
             )
         else:
@@ -809,6 +810,7 @@ class TapLocationViewSet(viewsets.ModelViewSet):
                 brewery=parsed_item.brewery or '',
                 beer_name=parsed_item.beer_name or '',
                 price_per_liter=parsed_item.price,
+                description=parsed_item.description or '',
             )
         
         serializer = TapSerializer(tap)
@@ -1107,6 +1109,7 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
                     brewery=item.get('brewery', ''),
                     beer_name=item.get('beer_name', ''),
                     price_per_liter=price,
+                    description=item.get('description') or (source_item.description if source_item else ''),
                 )
                 created.append(beer)
             

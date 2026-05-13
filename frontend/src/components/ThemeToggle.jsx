@@ -18,7 +18,7 @@ function ThemeToggle() {
       whileTap={{ scale: 0.9 }}
       aria-label={`Переключить на ${theme === 'light' ? 'темную' : 'светлую'} тему`}
     >
-      {theme === 'light' ? '🌙' : '☀️'}
+      {theme === 'light' ? 'Темная тема' : 'Светлая тема'}
     </motion.button>
   );
 }

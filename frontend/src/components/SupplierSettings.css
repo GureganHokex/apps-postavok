@@ -174,3 +174,60 @@
 .btn-cancel:hover {
   background: var(--border-color, #cbd5e1);
 }
+
+/* === Адаптив === */
+
+@media (max-width: 768px) {
+  .supplier-settings {
+    padding: var(--spacing-sm);
+  }
+
+  .supplier-settings-header h2 {
+    font-size: var(--font-xl);
+  }
+
+  .btn-add-supplier {
+    width: 100%;
+    min-height: var(--tap-target);
+    font-size: var(--font-base);
+  }
+
+  .supplier-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .supplier-name {
+    font-size: var(--font-lg);
+    word-break: break-word;
+  }
+
+  .supplier-card-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .btn-edit,
+  .btn-delete {
+    min-height: var(--tap-target);
+    font-size: var(--font-base);
+  }
+
+  .supplier-form .form-row input[type="text"] {
+    padding: 0.65rem 0.75rem;
+    min-height: var(--tap-target);
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+    min-height: var(--tap-target);
+    font-size: var(--font-base);
+  }
+}

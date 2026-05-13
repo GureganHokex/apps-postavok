@@ -121,7 +121,7 @@ function StatisticsDashboard({ items }) {
               className="button button-secondary"
               onClick={handleExportStats}
             >
-              📥 Экспорт JSON
+              Экспорт JSON
             </button>
             <ExportButton
               data={[
@@ -142,7 +142,7 @@ function StatisticsDashboard({ items }) {
             animate={{ opacity: 1, scale: 1 }}
             className="stat-card"
           >
-            <div className="stat-icon">📊</div>
+            <div className="stat-icon">Σ</div>
             <div className="stat-content">
               <div className="stat-label">Всего позиций</div>
               <div className="stat-value">{totalStats.total}</div>
@@ -155,7 +155,7 @@ function StatisticsDashboard({ items }) {
             transition={{ delay: 0.1 }}
             className="stat-card"
           >
-            <div className="stat-icon">💰</div>
+            <div className="stat-icon">₽</div>
             <div className="stat-content">
               <div className="stat-label">Средняя цена</div>
               <div className="stat-value">{averagePrice.toFixed(2)} ₽</div>
@@ -168,7 +168,7 @@ function StatisticsDashboard({ items }) {
             transition={{ delay: 0.2 }}
             className="stat-card"
           >
-            <div className="stat-icon">📦</div>
+            <div className="stat-icon">Q</div>
             <div className="stat-content">
               <div className="stat-label">С остатками</div>
               <div className="stat-value">{totalStats.withStock}</div>
@@ -181,7 +181,7 @@ function StatisticsDashboard({ items }) {
             transition={{ delay: 0.3 }}
             className="stat-card"
           >
-            <div className="stat-icon">📝</div>
+            <div className="stat-icon">N</div>
             <div className="stat-content">
               <div className="stat-label">С описанием</div>
               <div className="stat-value">{totalStats.withDescription}</div>

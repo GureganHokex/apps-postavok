@@ -167,28 +167,171 @@
   border-top: 2px solid var(--border-color);
 }
 
+.OrderForm .keg-selection-panel {
+  margin: 0 0 var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.OrderForm .keg-selection-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+}
+
+.OrderForm .keg-selection-header h3 {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-lg);
+  color: var(--text-primary);
+}
+
+.OrderForm .keg-selection-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.OrderForm .keg-selection-list,
+.OrderForm .modal-keg-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.OrderForm .keg-selection-item,
+.OrderForm .modal-keg-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--spacing-sm);
+  align-items: center;
+  padding: var(--spacing-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.OrderForm .modal-keg-item {
+  grid-template-columns: auto 1fr;
+}
+
+.OrderForm .keg-selection-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.OrderForm .keg-selection-meta,
+.OrderForm .keg-selection-summary {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.OrderForm .keg-selection-summary {
+  margin-top: var(--spacing-sm);
+  text-align: right;
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
   .OrderForm .order-controls {
     flex-direction: column;
+    padding: var(--spacing-sm);
   }
-  
+
+  .OrderForm .format-selector {
+    width: 100%;
+  }
+
+  .OrderForm .format-selector select {
+    flex: 1;
+    min-height: var(--tap-target);
+    font-size: 16px;
+  }
+
   .OrderForm .order-summary {
     width: 100%;
-    justify-content: space-between;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
   }
-  
+
   .OrderForm .summary-item {
-    flex: 1;
-    min-width: auto;
+    flex: 1 1 calc(50% - var(--spacing-sm));
+    min-width: 0;
+    padding: var(--spacing-sm);
   }
-  
+
+  .OrderForm .summary-item .value {
+    font-size: var(--font-lg);
+  }
+
+  .OrderForm .table-container {
+    /* Таблица заказа узкая (3-4 колонки), scroll нужен только при необходимости. */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .OrderForm .input-small {
+    width: 70px;
+    min-height: var(--tap-target);
+    font-size: 16px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .OrderForm .table th,
+  .OrderForm .table td {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-sm);
+  }
+
+  .OrderForm .total-label,
+  .OrderForm .total-value {
+    font-size: var(--font-base);
+  }
+
   .OrderForm .order-actions {
     flex-direction: column;
+    padding: var(--spacing-md);
   }
-  
+
+  .OrderForm .keg-selection-header {
+    flex-direction: column;
+  }
+
+  .OrderForm .keg-selection-item {
+    grid-template-columns: auto 1fr;
+  }
+
+  .OrderForm .keg-selection-meta {
+    grid-column: 2 / -1;
+  }
+
+  .OrderForm .keg-selection-summary {
+    text-align: left;
+  }
+
   .OrderForm .order-actions button {
     width: 100%;
+    min-height: var(--tap-target);
+  }
+
+  .modal-content {
+    width: calc(100% - 24px);
+    max-width: 100%;
+    padding: var(--spacing-md);
+    max-height: 80vh;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
+    width: 100%;
+    min-height: var(--tap-target);
   }
 }
 

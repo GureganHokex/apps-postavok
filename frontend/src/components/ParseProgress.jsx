@@ -54,19 +54,19 @@ export function ParseProgress({ isVisible, progress, message }) {
           
           <div className="parse-progress-steps">
             <div className={`step ${displayProgress >= 20 ? 'completed' : displayProgress >= 10 ? 'active' : ''}`}>
-              <span className="step-icon">{displayProgress >= 20 ? '✓' : '1'}</span>
+              <span className="step-icon">{displayProgress >= 20 ? 'OK' : '1'}</span>
               <span className="step-label">Загрузка файла</span>
             </div>
             <div className={`step ${displayProgress >= 50 ? 'completed' : displayProgress >= 30 ? 'active' : ''}`}>
-              <span className="step-icon">{displayProgress >= 50 ? '✓' : '2'}</span>
+              <span className="step-icon">{displayProgress >= 50 ? 'OK' : '2'}</span>
               <span className="step-label">Чтение данных</span>
             </div>
             <div className={`step ${displayProgress >= 80 ? 'completed' : displayProgress >= 60 ? 'active' : ''}`}>
-              <span className="step-icon">{displayProgress >= 80 ? '✓' : '3'}</span>
+              <span className="step-icon">{displayProgress >= 80 ? 'OK' : '3'}</span>
               <span className="step-label">Обработка</span>
             </div>
             <div className={`step ${displayProgress >= 100 ? 'completed' : displayProgress >= 90 ? 'active' : ''}`}>
-              <span className="step-icon">{displayProgress >= 100 ? '✓' : '4'}</span>
+              <span className="step-icon">{displayProgress >= 100 ? 'OK' : '4'}</span>
               <span className="step-label">Завершение</span>
             </div>
           </div>

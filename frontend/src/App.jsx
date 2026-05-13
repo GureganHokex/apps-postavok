@@ -21,6 +21,7 @@ import StatisticsDashboard from './components/StatisticsDashboard';
 import TapsPage from './components/TapsPage';
 import SupplierSettings from './components/SupplierSettings';
 import ErrorBoundary from './components/ErrorBoundary';
+import BottomTabBar from './components/shell/BottomTabBar';
 import { getApiErrorMessage } from './api';
 import './App.css';
 
@@ -165,6 +166,10 @@ function LoggedInLayout({ fullAccess, role }) {
     <QueryClientProvider client={queryClient}>
       <Toaster
         position="top-right"
+        containerStyle={{
+          top: 'calc(var(--safe-top, 0px) + 16px)',
+          right: 16,
+        }}
         toastOptions={{
           duration: 4000,
           style: {
@@ -172,6 +177,7 @@ function LoggedInLayout({ fullAccess, role }) {
             color: 'var(--text-primary)',
             boxShadow: 'var(--shadow-lg)',
             borderRadius: 'var(--radius-md)',
+            maxWidth: 'calc(100vw - 32px)',
           },
           success: { iconTheme: { primary: 'var(--success-color)', secondary: 'white' } },
           error: { iconTheme: { primary: 'var(--danger-color)', secondary: 'white' } },
@@ -277,78 +283,91 @@ function AppContent({ fullAccess = false, role = 'user' }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentFile, allowedTabs]);
 
+  /*
+   * Декларация табов одним массивом — единый источник истины для верхней
+   * App-nav и нижнего BottomTabBar. Порядок задаёт приоритет: на мобиле
+   * первые 4 видимых попадают в bottom-bar, остальные — в "Ещё".
+   */
+  const tabs = useMemo(() => {
+    const itemsAvailable = allowedTabs.has('items') && !!currentFile;
+    return [
+      {
+        id: 'upload',
+        label: 'Загрузка',
+        fullLabel: 'Загрузка файлов',
+        icon: '',
+        visible: allowedTabs.has('upload'),
+      },
+      {
+        id: 'items',
+        label: 'Позиции',
+        fullLabel: 'Позиции',
+        icon: '',
+        badge: items.length > 0 ? items.length : null,
+        visible: itemsAvailable,
+      },
+      {
+        id: 'order',
+        label: 'Заказ',
+        fullLabel: 'Формирование заказа',
+        icon: '',
+        badge: selectedCount > 0 ? selectedCount : null,
+        visible: itemsAvailable && allowedTabs.has('order'),
+      },
+      {
+        id: 'taps',
+        label: 'Краны',
+        fullLabel: 'Краны',
+        icon: '',
+        visible: allowedTabs.has('taps'),
+      },
+      {
+        id: 'orders-history',
+        label: 'История',
+        fullLabel: 'История заказов',
+        icon: '',
+        visible: allowedTabs.has('orders-history'),
+      },
+      {
+        id: 'statistics',
+        label: 'Статистика',
+        fullLabel: 'Статистика',
+        icon: '',
+        visible: itemsAvailable && allowedTabs.has('statistics'),
+      },
+      {
+        id: 'metadata',
+        label: 'Метаданные',
+        fullLabel: 'Метаданные',
+        icon: 'ℹ️',
+        visible: itemsAvailable && allowedTabs.has('metadata'),
+      },
+      {
+        id: 'suppliers',
+        label: 'Поставщики',
+        fullLabel: 'Настройки поставщиков',
+        icon: '',
+        visible: allowedTabs.has('suppliers'),
+      },
+    ].filter((tab) => tab.visible);
+  }, [allowedTabs, currentFile, items.length, selectedCount]);
+
   return (
     <ErrorBoundary>
       <div className="App">
-        <nav className="App-nav">
-          {allowedTabs.has('upload') && (
+        <nav className="App-nav" aria-label="Разделы">
+          {tabs.map((tab) => (
             <button
-              className={activeTab === 'upload' ? 'active' : ''}
-              onClick={() => setActiveTabSafe('upload')}
-              aria-label="Загрузка файлов"
+              key={tab.id}
+              className={activeTab === tab.id ? 'active' : ''}
+              onClick={() => setActiveTabSafe(tab.id)}
+              aria-label={tab.fullLabel}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
             >
-              📤 Загрузка файлов
+              <span aria-hidden="true">{tab.icon}</span> {tab.fullLabel}
+              {tab.badge != null ? ` (${tab.badge})` : ''}
             </button>
-          )}
-          {allowedTabs.has('items') && currentFile && (
-            <>
-              <button
-                className={activeTab === 'items' ? 'active' : ''}
-                onClick={() => setActiveTabSafe('items')}
-                aria-label="Позиции"
-              >
-                📋 Позиции {items.length > 0 && `(${items.length})`}
-              </button>
-              <button
-                className={activeTab === 'metadata' ? 'active' : ''}
-                onClick={() => setActiveTabSafe('metadata')}
-                aria-label="Метаданные"
-              >
-                ℹ️ Метаданные
-              </button>
-              <button
-                className={activeTab === 'order' ? 'active' : ''}
-                onClick={() => setActiveTabSafe('order')}
-                aria-label="Формирование заказа"
-              >
-                🛒 Заказ {selectedCount > 0 && `(${selectedCount})`}
-              </button>
-              <button
-                className={activeTab === 'statistics' ? 'active' : ''}
-                onClick={() => setActiveTabSafe('statistics')}
-                aria-label="Статистика"
-              >
-                📊 Статистика
-              </button>
-            </>
-          )}
-          {allowedTabs.has('orders-history') && (
-            <button
-              className={activeTab === 'orders-history' ? 'active' : ''}
-              onClick={() => setActiveTabSafe('orders-history')}
-              aria-label="История заказов"
-            >
-              📜 История заказов
-            </button>
-          )}
-          {allowedTabs.has('taps') && (
-            <button
-              className={activeTab === 'taps' ? 'active' : ''}
-              onClick={() => setActiveTabSafe('taps')}
-              aria-label="Краны"
-            >
-              🍺 Краны
-            </button>
-          )}
-          {allowedTabs.has('suppliers') && (
-            <button
-              className={activeTab === 'suppliers' ? 'active' : ''}
-              onClick={() => setActiveTabSafe('suppliers')}
-              aria-label="Настройки поставщиков"
-            >
-              ⚙️ Настройки поставщиков
-            </button>
-          )}
+          ))}
         </nav>
 
       <main className="App-main">
@@ -466,6 +485,12 @@ function AppContent({ fullAccess = false, role = 'user' }) {
           )}
         </AnimatePresence>
       </main>
+
+      <BottomTabBar
+        items={tabs.map(({ id, label, icon, badge }) => ({ id, label, icon, badge }))}
+        activeId={activeTab}
+        onSelect={setActiveTabSafe}
+      />
       </div>
     </ErrorBoundary>
   );

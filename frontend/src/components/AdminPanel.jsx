@@ -6,11 +6,13 @@ import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { getUsers, createUser, updateUser, deleteUser } from '../api';
+import { useIsMobile } from '../hooks/useBreakpoint';
 import './AdminPanel.css';
 
 const ROLE_LABELS = { admin: 'Администратор', bartender: 'Бармен', user: 'Пользователь' };
 
 export default function AdminPanel() {
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -188,95 +190,154 @@ export default function AdminPanel() {
         </form>
       )}
 
-      <div className="admin-panel-table-wrap">
-        <table className="admin-panel-table">
-          <thead>
-            <tr>
-              <th>Логин</th>
-              <th>Имя</th>
-              <th>Фамилия</th>
-              <th>Email</th>
-              <th>Роль</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                {editingId === u.id ? (
-                  <>
-                    <td colSpan={6}>
-                      <form className="admin-panel-edit-form" onSubmit={handleEditSubmit}>
-                        <div className="admin-panel-form-grid">
-                          <label>
-                            Роль
-                            <select
-                              value={editForm.role}
-                              onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
-                            >
-                              {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                                <option key={k} value={k}>{v}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            Имя
-                            <input
-                              value={editForm.first_name}
-                              onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
-                            />
-                          </label>
-                          <label>
-                            Фамилия
-                            <input
-                              value={editForm.last_name}
-                              onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
-                            />
-                          </label>
-                          <label>
-                            Email
-                            <input
-                              type="email"
-                              value={editForm.email}
-                              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                            />
-                          </label>
-                          <label>
-                            Новый пароль (оставьте пустым, чтобы не менять)
-                            <input
-                              type="password"
-                              value={editForm.password}
-                              onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
-                              placeholder="Не менять"
-                              autoComplete="new-password"
-                            />
-                          </label>
+      {/*
+        * Адаптивный рендер списка:
+        * - десктоп/планшет — обычная таблица;
+        * - мобильный — карточки с label/value.
+        * Форма редактирования вынесена в renderEditForm()
+        * чтобы не дублировать JSX между двумя ветками.
+        */}
+      {(() => {
+        const renderEditForm = () => (
+          <form className="admin-panel-edit-form" onSubmit={handleEditSubmit}>
+            <div className="admin-panel-form-grid">
+              <label>
+                Роль
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
+                >
+                  {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Имя
+                <input
+                  value={editForm.first_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
+                />
+              </label>
+              <label>
+                Фамилия
+                <input
+                  value={editForm.last_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </label>
+              <label>
+                Новый пароль (оставьте пустым, чтобы не менять)
+                <input
+                  type="password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Не менять"
+                  autoComplete="new-password"
+                />
+              </label>
+            </div>
+            <div className="admin-panel-form-actions">
+              <button type="submit" disabled={updateMutation.isPending}>Сохранить</button>
+              <button type="button" onClick={() => setEditingId(null)}>Отмена</button>
+            </div>
+          </form>
+        );
+
+        if (isMobile) {
+          return (
+            <div className="admin-panel-cards">
+              {users.map((u) => (
+                <div key={u.id} className="admin-panel-card">
+                  {editingId === u.id ? (
+                    renderEditForm()
+                  ) : (
+                    <>
+                      <div className="admin-panel-card-header">
+                        <span className="admin-panel-card-title">{u.username}</span>
+                        <span className={`admin-panel-role-badge admin-panel-role-badge--${u.role}`}>
+                          {ROLE_LABELS[u.role] || u.role}
+                        </span>
+                      </div>
+                      <dl className="admin-panel-card-fields">
+                        <div>
+                          <dt>Имя</dt>
+                          <dd>{u.first_name || '—'}</dd>
                         </div>
-                        <div className="admin-panel-form-actions">
-                          <button type="submit" disabled={updateMutation.isPending}>Сохранить</button>
-                          <button type="button" onClick={() => setEditingId(null)}>Отмена</button>
+                        <div>
+                          <dt>Фамилия</dt>
+                          <dd>{u.last_name || '—'}</dd>
                         </div>
-                      </form>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td>{u.username}</td>
-                    <td>{u.first_name || '—'}</td>
-                    <td>{u.last_name || '—'}</td>
-                    <td>{u.email || '—'}</td>
-                    <td>{ROLE_LABELS[u.role] || u.role}</td>
-                    <td>
-                      <button type="button" className="admin-panel-btn-edit" onClick={() => startEdit(u)}>Изменить</button>
-                      <button type="button" className="admin-panel-btn-delete" onClick={() => handleDelete(u.id, u.username)}>Удалить</button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                        <div className="admin-panel-card-fields__full">
+                          <dt>Email</dt>
+                          <dd>{u.email || '—'}</dd>
+                        </div>
+                      </dl>
+                      <div className="admin-panel-card-actions">
+                        <button type="button" className="admin-panel-btn-edit" onClick={() => startEdit(u)}>
+                          Изменить
+                        </button>
+                        <button type="button" className="admin-panel-btn-delete" onClick={() => handleDelete(u.id, u.username)}>
+                          Удалить
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {users.length === 0 && (
+                <div className="admin-panel-empty">Пользователи не найдены</div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <div className="admin-panel-table-wrap">
+            <table className="admin-panel-table">
+              <thead>
+                <tr>
+                  <th>Логин</th>
+                  <th>Имя</th>
+                  <th>Фамилия</th>
+                  <th>Email</th>
+                  <th>Роль</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    {editingId === u.id ? (
+                      <td colSpan={6}>{renderEditForm()}</td>
+                    ) : (
+                      <>
+                        <td>{u.username}</td>
+                        <td>{u.first_name || '—'}</td>
+                        <td>{u.last_name || '—'}</td>
+                        <td>{u.email || '—'}</td>
+                        <td>{ROLE_LABELS[u.role] || u.role}</td>
+                        <td>
+                          <button type="button" className="admin-panel-btn-edit" onClick={() => startEdit(u)}>Изменить</button>
+                          <button type="button" className="admin-panel-btn-delete" onClick={() => handleDelete(u.id, u.username)}>Удалить</button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }

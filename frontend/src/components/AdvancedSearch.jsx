@@ -40,7 +40,7 @@ export function AdvancedSearch({ onSearch, onClose }) {
     <div className="advanced-search">
       <div className="advanced-search-header">
         <h3>Расширенный поиск</h3>
-        <button onClick={onClose} className="close-button">✕</button>
+        <button onClick={onClose} className="close-button">Закрыть</button>
       </div>
       <form onSubmit={handleSubmit} className="advanced-search-form">
         <div className="form-group">

@@ -64,7 +64,7 @@ export function ContextMenu({ x, y, items, onClose }) {
             onClose();
           }}
         >
-          <span className="context-menu-icon">{item.icon}</span>
+          {item.icon ? <span className="context-menu-icon">{item.icon}</span> : null}
           <span className="context-menu-label">{item.label}</span>
           {item.shortcut && (
             <span className="context-menu-shortcut">{item.shortcut}</span>

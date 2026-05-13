@@ -101,11 +101,66 @@
 }
 
 /* Адаптивность */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .StatisticsDashboard .charts-grid {
+    /*
+     * Графики Recharts плохо себя ведут на узких ширинах:
+     * лучше сразу одна колонка, чем второй ряд по 380px.
+     */
     grid-template-columns: 1fr;
   }
-  
+}
+
+@media (max-width: 768px) {
+  .statistics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .statistics-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .statistics-actions > * {
+    flex: 1 1 auto;
+    min-height: var(--tap-target);
+  }
+
+  .StatisticsDashboard .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm);
+  }
+
+  .StatisticsDashboard .stat-card {
+    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+
+  .StatisticsDashboard .stat-card:hover {
+    transform: none;
+  }
+
+  .StatisticsDashboard .stat-icon {
+    width: 44px;
+    height: 44px;
+    font-size: var(--font-xl);
+  }
+
+  .StatisticsDashboard .stat-value {
+    font-size: var(--font-lg);
+  }
+
+  .StatisticsDashboard .chart-card {
+    padding: var(--spacing-md);
+  }
+
+  .StatisticsDashboard .chart-card h3 {
+    font-size: var(--font-base);
+  }
+}
+
+@media (max-width: 480px) {
   .StatisticsDashboard .stats-grid {
     grid-template-columns: 1fr;
   }

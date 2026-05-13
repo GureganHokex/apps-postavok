@@ -18,10 +18,12 @@ import {
   exportLocationTaps,
 } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsMobile } from '../hooks/useBreakpoint';
 import './TapsPage.css';
 
 function TapsPage() {
   const { role, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const canAddDeleteLocationsAndTaps = isAdmin;
   const canOnlyChangeVisibility = role === 'user';
   const [locations, setLocations] = useState([]);
@@ -35,6 +37,53 @@ function TapsPage() {
   const [newBeerInput, setNewBeerInput] = useState('');
   const [draggedBeer, setDraggedBeer] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  /*
+   * Альтернатива drag-n-drop для тач-устройств:
+   * - тап по доступной позиции — выбираем (selectedBeer).
+   * - тап по слоту крана (current / next_beer_1 / next_beer_2) — назначаем.
+   * На десктопе работает параллельно с drag-n-drop и не мешает редактированию
+   * (если selectedBeer не выбран — тап по ячейке всё ещё начинает редактирование).
+   */
+  const [selectedBeer, setSelectedBeer] = useState(null);
+  const [isBeersPanelOpen, setIsBeersPanelOpen] = useState(false);
+  const [detailsTap, setDetailsTap] = useState(null);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+
+  useEffect(() => {
+    setIsEditingDescription(false);
+    setDescriptionDraft('');
+  }, [detailsTap?.id]);
+
+  const startEditDescription = () => {
+    if (!detailsTap) return;
+    setDescriptionDraft(detailsTap.description || '');
+    setIsEditingDescription(true);
+  };
+
+  const cancelEditDescription = () => {
+    setIsEditingDescription(false);
+    setDescriptionDraft('');
+  };
+
+  const saveDescription = async () => {
+    if (!detailsTap) return;
+    setIsSavingDescription(true);
+    try {
+      const nextDescription = descriptionDraft;
+      await updateTap(detailsTap.id, { description: nextDescription });
+      setDetailsTap((prev) => (prev ? { ...prev, description: nextDescription } : prev));
+      setIsEditingDescription(false);
+      setDescriptionDraft('');
+      loadActiveLocation();
+      toast.success('Описание сохранено');
+    } catch (err) {
+      toast.error('Не удалось сохранить описание');
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
 
   // Загрузка локаций
   const loadLocations = useCallback(async () => {
@@ -232,28 +281,60 @@ function TapsPage() {
     e.preventDefault();
   };
 
+  // Унифицированное назначение позиции на слот крана.
+  // Используется как из drag-n-drop, так и из click-to-place.
+  const assignBeerToTap = useCallback(
+    async (beer, tapId, field) => {
+      if (!beer) return;
+      try {
+        if (field === 'current') {
+          await updateTap(tapId, {
+            brewery: beer.brewery,
+            beer_name: beer.beer_name,
+            price_per_liter: beer.price_per_liter,
+            description: beer.description || '',
+            status: 'active',
+          });
+        } else {
+          await updateTap(tapId, { [field]: beer.display_name });
+        }
+        loadActiveLocation();
+        toast.success('Позиция назначена');
+      } catch (err) {
+        toast.error('Ошибка обновления');
+      }
+    },
+    [loadActiveLocation],
+  );
+
   const handleDropOnTap = async (tapId, field) => {
     if (!draggedBeer) return;
-    
-    try {
-      if (field === 'current') {
-        await updateTap(tapId, {
-          brewery: draggedBeer.brewery,
-          beer_name: draggedBeer.beer_name,
-          price_per_liter: draggedBeer.price_per_liter,
-          status: 'active',
-        });
-      } else {
-        await updateTap(tapId, {
-          [field]: draggedBeer.display_name,
-        });
-      }
-      loadActiveLocation();
-      setDraggedBeer(null);
-    } catch (err) {
-      toast.error('Ошибка обновления');
-    }
+    await assignBeerToTap(draggedBeer, tapId, field);
+    setDraggedBeer(null);
   };
+
+  // Тап по слоту крана: если выбрана позиция — назначаем; иначе обычное редактирование.
+  const handleCellTap = useCallback(
+    (tap, field, currentValue) => {
+      if (selectedBeer) {
+        assignBeerToTap(selectedBeer, tap.id, field);
+        setSelectedBeer(null);
+        setIsBeersPanelOpen(false);
+        return;
+      }
+      if (field === 'current' && (tap.current_beer || tap.brewery || tap.beer_name)) {
+        setDetailsTap(tap);
+        return;
+      }
+      startEditing(tap.id, field === 'current' ? 'current_beer' : field, currentValue);
+    },
+    [selectedBeer, assignBeerToTap],
+  );
+
+  // Тап по доступной позиции: переключаем выбор. Повторный тап — снимает.
+  const toggleSelectBeer = useCallback((beer) => {
+    setSelectedBeer((prev) => (prev?.id === beer.id ? null : beer));
+  }, []);
 
   // Фильтрация кранов по поисковому запросу
   const filteredTaps = useMemo(() => {
@@ -299,6 +380,7 @@ function TapsPage() {
         brewery: newBrewery,
         beer_name: newBeerName,
         price_per_liter: newPrice,
+        description: '',
         status: newStatus,
         next_beer_1: tap.next_beer_2 || '',
         next_beer_2: '',
@@ -342,7 +424,7 @@ function TapsPage() {
                   }}
                   title="Экспортировать краны в Excel"
                 >
-                  📥 Экспорт в Excel
+                  Экспорт в Excel
                 </button>
               )}
             </div>
@@ -386,10 +468,10 @@ function TapsPage() {
                         if (e.key === 'Escape') setIsAddingLocation(false);
                       }}
                     />
-                    <button type="button" onClick={handleCreateLocation} className="btn-confirm" title="Создать локацию">✓</button>
+                    <button type="button" onClick={handleCreateLocation} className="btn-confirm" title="Создать локацию">OK</button>
                     <button type="button" onClick={() => setIsAddingLocation(false)} className="btn-cancel" title="Отмена">×</button>
                   </div>
-                  <p className="add-location-hint">Нажмите ✓ или Enter — пока только текст в поле, локация не создана.</p>
+                  <p className="add-location-hint">Нажмите OK или Enter — пока только текст в поле, локация не создана.</p>
                 </div>
               ) : (
                 <button
@@ -422,7 +504,7 @@ function TapsPage() {
               <div className="taps-search">
                 <input
                   type="text"
-                  placeholder="🔍 Поиск по пиву или пивоварне..."
+                  placeholder="Поиск по пиву или пивоварне..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="search-input"
@@ -469,7 +551,15 @@ function TapsPage() {
                           <td className="col-num">{tap.position}</td>
                           {canOnlyChangeVisibility ? (
                             <>
-                              <td className="col-current" colSpan={2}>
+                              <td
+                                className="col-current tap-details-trigger"
+                                colSpan={2}
+                                onClick={() => {
+                                  if (tap.current_beer || tap.brewery || tap.beer_name) {
+                                    setDetailsTap(tap);
+                                  }
+                                }}
+                              >
                                 <span>{tap.current_beer || '—'}</span>
                               </td>
                               <td className="col-actions">
@@ -487,7 +577,7 @@ function TapsPage() {
                                       }
                                     }}
                                   />
-                                  <span>{tap.is_visible !== false ? '👁' : '👁‍🗨'}</span>
+                                  <span>{tap.is_visible !== false ? 'Показан' : 'Скрыт'}</span>
                                 </label>
                               </td>
                             </>
@@ -495,7 +585,7 @@ function TapsPage() {
                             <>
                           {/* Текущее пиво */}
                           <td
-                            className="col-current"
+                            className={`col-current${selectedBeer ? ' col-droppable' : ''}`}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTap(tap.id, 'current')}
                           >
@@ -514,7 +604,7 @@ function TapsPage() {
                               />
                               <div 
                                 className="cell-content"
-                                onClick={() => startEditing(tap.id, 'current_beer', tap.current_beer)}
+                                onClick={() => handleCellTap(tap, 'current', tap.current_beer)}
                               >
                                 <span>{tap.current_beer || '—'}</span>
                               </div>
@@ -523,7 +613,7 @@ function TapsPage() {
                           
                           {/* След 1 */}
                           <td
-                            className="col-next"
+                            className={`col-next${selectedBeer ? ' col-droppable' : ''}`}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTap(tap.id, 'next_beer_1')}
                           >
@@ -552,7 +642,7 @@ function TapsPage() {
                               ) : (
                                 <div 
                                   className="cell-content"
-                                  onClick={() => startEditing(tap.id, 'next_beer_1', tap.next_beer_1)}
+                                  onClick={() => handleCellTap(tap, 'next_beer_1', tap.next_beer_1)}
                                 >
                                   <span>{tap.next_beer_1 || '—'}</span>
                                 </div>
@@ -562,7 +652,7 @@ function TapsPage() {
                           
                           {/* След 2 */}
                           <td
-                            className="col-next"
+                            className={`col-next${selectedBeer ? ' col-droppable' : ''}`}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTap(tap.id, 'next_beer_2')}
                           >
@@ -591,7 +681,7 @@ function TapsPage() {
                               ) : (
                                 <div 
                                   className="cell-content"
-                                  onClick={() => startEditing(tap.id, 'next_beer_2', tap.next_beer_2)}
+                                  onClick={() => handleCellTap(tap, 'next_beer_2', tap.next_beer_2)}
                                 >
                                   <span>{tap.next_beer_2 || '—'}</span>
                                 </div>
@@ -615,7 +705,7 @@ function TapsPage() {
                                 onClick={() => handleDeleteTap(tap.id)}
                                 title="Удалить кран"
                               >
-                                🗑
+                                Удалить
                               </button>
                             )}
                           </td>
@@ -643,11 +733,29 @@ function TapsPage() {
 
         {/* Боковая панель с доступным пивом — только для тех, кто может редактировать краны */}
         {activeLocation && !canOnlyChangeVisibility && (
-          <div className="taps-sidebar">
+          <div className={`taps-sidebar${isMobile && !isBeersPanelOpen ? ' taps-sidebar--hidden' : ''}${isMobile ? ' taps-sidebar--mobile' : ''}`}>
             <div className="card">
-              <h3>Доступные позиции</h3>
-              <p className="sidebar-hint">Перетащите на кран</p>
-              
+              <div className="sidebar-head">
+                <h3>Доступные позиции</h3>
+                {isMobile && (
+                  <button
+                    type="button"
+                    className="sidebar-close"
+                    onClick={() => setIsBeersPanelOpen(false)}
+                    aria-label="Закрыть"
+                  >
+                    Закрыть
+                  </button>
+                )}
+              </div>
+              <p className="sidebar-hint">
+                {selectedBeer
+                  ? 'Тапните по нужному слоту крана'
+                  : isMobile
+                    ? 'Тапните по позиции, затем по слоту крана'
+                    : 'Перетащите на кран — или тапните и выберите слот'}
+              </p>
+
               <div className="add-beer-form">
                 <input
                   type="text"
@@ -660,30 +768,172 @@ function TapsPage() {
                 />
                 <button onClick={handleAddAvailableBeer}>+</button>
               </div>
-              
+
               <div className="available-beers-list">
-                {activeLocation.available_beers && activeLocation.available_beers.map(beer => (
-                  <div
-                    key={beer.id}
-                    className="available-beer-item"
-                    draggable
-                    onDragStart={() => handleDragStart(beer)}
-                  >
-                    <span className="drag-handle">⋮⋮</span>
-                    <span className="beer-display">{beer.display_name}</span>
-                    <button
-                      className="delete-beer-btn"
-                      onClick={() => handleDeleteAvailableBeer(beer.id)}
+                {activeLocation.available_beers && activeLocation.available_beers.map(beer => {
+                  const isSelected = selectedBeer?.id === beer.id;
+                  return (
+                    <div
+                      key={beer.id}
+                      className={`available-beer-item${isSelected ? ' available-beer-item--selected' : ''}`}
+                      draggable
+                      onDragStart={() => handleDragStart(beer)}
+                      onClick={() => toggleSelectBeer(beer)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleSelectBeer(beer);
+                        }
+                      }}
                     >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                
+                      <span className="drag-handle">⋮⋮</span>
+                      <span className="beer-display">{beer.display_name}</span>
+                      <button
+                        className="delete-beer-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAvailableBeer(beer.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+
                 {(!activeLocation.available_beers || activeLocation.available_beers.length === 0) && (
                   <p className="empty-list">Нет доступных позиций</p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Floating-кнопка открытия панели доступных позиций — только на мобильном. */}
+        {isMobile && activeLocation && !canOnlyChangeVisibility && !isBeersPanelOpen && (
+          <button
+            type="button"
+            className="taps-fab"
+            onClick={() => setIsBeersPanelOpen(true)}
+            aria-label="Открыть доступные позиции"
+          >
+            Позиции
+            {activeLocation.available_beers?.length ? (
+              <span className="taps-fab-badge">{activeLocation.available_beers.length}</span>
+            ) : null}
+          </button>
+        )}
+
+        {/* Плашка с выбранной позицией — подсказка пользователю что делать дальше. */}
+        {selectedBeer && (
+          <div className="taps-selected-banner" role="status" aria-live="polite">
+            <span className="taps-selected-banner__label">Назначить:</span>
+            <span className="taps-selected-banner__beer">{selectedBeer.display_name}</span>
+            <button
+              type="button"
+              className="taps-selected-banner__cancel"
+              onClick={() => setSelectedBeer(null)}
+            >
+              Отмена
+            </button>
+          </div>
+        )}
+
+        {detailsTap && (
+          <div className="tap-details-modal" onClick={() => setDetailsTap(null)}>
+            <div className="tap-details-card" onClick={(e) => e.stopPropagation()}>
+              <div className="tap-details-header">
+                <div>
+                  <h3>Описание кеги</h3>
+                  <p>Кран №{detailsTap.position}</p>
+                </div>
+                <button
+                  type="button"
+                  className="tap-details-close"
+                  onClick={() => setDetailsTap(null)}
+                >
+                  Закрыть
+                </button>
+              </div>
+
+              <dl className="tap-details-list">
+                <div>
+                  <dt>Пивоварня</dt>
+                  <dd>{detailsTap.brewery || 'Не указана'}</dd>
+                </div>
+                <div>
+                  <dt>Название</dt>
+                  <dd>{detailsTap.beer_name || detailsTap.current_beer || 'Не указано'}</dd>
+                </div>
+                <div>
+                  <dt>Цена</dt>
+                  <dd>{detailsTap.price_per_liter ? `${Math.round(detailsTap.price_per_liter)} ₽` : 'Не указана'}</dd>
+                </div>
+                <div>
+                  <dt>Описание</dt>
+                  {isEditingDescription ? (
+                    <dd className="tap-details-description-edit">
+                      <textarea
+                        className="tap-details-textarea"
+                        value={descriptionDraft}
+                        onChange={(e) => setDescriptionDraft(e.target.value)}
+                        placeholder="Например: стиль, ABV, IBU, особенности, рекомендации по подаче"
+                        rows={5}
+                        autoFocus
+                        disabled={isSavingDescription}
+                      />
+                      <div className="tap-details-edit-actions">
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={saveDescription}
+                          disabled={isSavingDescription}
+                        >
+                          {isSavingDescription ? 'Сохранение…' : 'Сохранить'}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          onClick={cancelEditDescription}
+                          disabled={isSavingDescription}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </dd>
+                  ) : (
+                    <dd>
+                      {detailsTap.description
+                        ? detailsTap.description
+                        : 'Описание для этой кеги не указано.'}
+                    </dd>
+                  )}
+                </div>
+              </dl>
+
+              {!canOnlyChangeVisibility && !isEditingDescription && (
+                <div className="tap-details-actions">
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={startEditDescription}
+                  >
+                    {detailsTap.description ? 'Изменить описание' : 'Добавить описание'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => {
+                      setDetailsTap(null);
+                      startEditing(detailsTap.id, 'current_beer', detailsTap.current_beer);
+                    }}
+                  >
+                    Редактировать название
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

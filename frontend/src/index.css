@@ -49,6 +49,32 @@
   --font-xl: 1.25rem;
   --font-2xl: 1.5rem;
   --font-3xl: 2rem;
+
+  /*
+   * Брейкпоинты. Дублируются в src/hooks/useBreakpoint.js — при изменении
+   * синхронизируйте оба источника. В @media-запросах используем фиксированные
+   * px-значения, т.к. var() внутри media queries поддерживается ограниченно.
+   *  --bp-sm: 480px   мобильный portrait
+   *  --bp-md: 768px   мобильный landscape / маленький планшет
+   *  --bp-lg: 1024px  планшет / маленький ноут
+   *  --bp-xl: 1280px  десктоп
+   */
+  --bp-sm: 480px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+
+  /* Тач-таргет (Apple HIG / Material) */
+  --tap-target: 44px;
+
+  /* iOS safe-area (челка/home indicator). На не-iOS это 0px. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Высота нижнего таб-бара на мобильных. Используется как padding-bottom у main. */
+  --bottom-tabbar-h: 56px;
 }
 
 /* Темная тема */
@@ -94,5 +120,107 @@ code {
 
 * {
   box-sizing: border-box;
+}
+
+/*
+ * Глобальные правила для адаптивности.
+ * Цель — устранить системные причины "кривого" отображения на мобильных
+ * до того, как мы доходим до конкретных компонентов.
+ */
+
+html,
+body {
+  /* Контентам нельзя расталкивать страницу за вьюпорт по горизонтали. */
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+body {
+  /* Учитываем безопасные зоны iOS (челка / home indicator). */
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/*
+ * iOS Safari зумит страницу при фокусе на input/textarea/select с
+ * font-size < 16px. Это и есть один из основных источников
+ * "кривого отображения" на телефоне. Жёстко поднимаем до 16px на мобильных.
+ */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Изображения по умолчанию не должны выпирать. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Минимальный тач-таргет для интерактивных элементов на узких экранах. */
+@media (max-width: 768px) {
+  button,
+  a.button,
+  .button,
+  .App-nav button,
+  .header-actions a,
+  .header-actions button {
+    min-height: var(--tap-target);
+  }
+}
+
+/* Класс-помощник: видимость только на мобильном / только на десктопе. */
+.only-mobile {
+  display: none;
+}
+.only-desktop {
+  display: initial;
+}
+@media (max-width: 768px) {
+  .only-mobile {
+    display: initial;
+  }
+  .only-desktop {
+    display: none !important;
+  }
+}
+
+/* Уважаем системную настройку "Reduce Motion". */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Убираем серый highlight на тач-событиях iOS/Android Chrome.
+ * Оставляем visible только клавиатурный фокус (:focus-visible)
+ * чтобы a11y и навигация Tab остались.
+ */
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-color, #3498db);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 

@@ -135,7 +135,7 @@ class TapSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tap
         fields = ['id', 'location', 'position', 'brewery',
-                 'beer_name', 'price_per_liter', 'next_beer_1',
+                 'beer_name', 'price_per_liter', 'description', 'next_beer_1',
                  'next_beer_2', 'color_current', 'color_next1',
                  'color_next2', 'status', 'is_visible', 'current_beer', 'updated_at']
         read_only_fields = ['updated_at']
@@ -163,7 +163,7 @@ class AvailableBeerSerializer(serializers.ModelSerializer):
     class Meta:
         model = AvailableBeer
         fields = ['id', 'location', 'brewery', 'beer_name', 
-                 'price_per_liter', 'display_name', 'created_at']
+                 'price_per_liter', 'description', 'display_name', 'created_at']
         read_only_fields = ['created_at']
     
     def get_display_name(self, obj):

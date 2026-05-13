@@ -1,0 +1,168 @@
+/*
+ * Нижний таб-бар. Только мобильный режим.
+ * Скрыт на экранах > 768px.
+ */
+
+.bottom-tabbar {
+  display: none;
+}
+
+.bottom-tabbar__backdrop {
+  display: none;
+}
+
+.bottom-tabbar__sheet {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .bottom-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: stretch;
+    align-items: stretch;
+    background-color: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    padding-bottom: var(--safe-bottom);
+    height: calc(var(--bottom-tabbar-h) + var(--safe-bottom));
+  }
+
+  .bottom-tabbar__item {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px;
+    background: transparent;
+    border: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.1;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--transition-fast), background-color var(--transition-fast);
+    position: relative;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottom-tabbar__item:active {
+    background-color: var(--bg-tertiary);
+  }
+
+  .bottom-tabbar__item--active {
+    color: var(--primary-color);
+  }
+
+  .bottom-tabbar__icon {
+    font-size: 20px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-tabbar__label {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .bottom-tabbar__badge {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 22px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--danger-color);
+    color: #fff;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .bottom-tabbar__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 49;
+    animation: bottom-tabbar-fade-in 0.2s ease;
+  }
+
+  .bottom-tabbar__sheet {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--bottom-tabbar-h) + var(--safe-bottom));
+    z-index: 51;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 8px 0;
+    animation: bottom-tabbar-slide-up 0.2s ease;
+  }
+
+  .bottom-tabbar__sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+    min-height: 48px;
+  }
+
+  .bottom-tabbar__sheet-item:active {
+    background-color: var(--bg-tertiary);
+  }
+
+  .bottom-tabbar__sheet-item--active {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .bottom-tabbar__sheet-item .bottom-tabbar__icon {
+    font-size: 22px;
+    width: 28px;
+    text-align: center;
+  }
+}
+
+@keyframes bottom-tabbar-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bottom-tabbar-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

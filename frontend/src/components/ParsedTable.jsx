@@ -564,7 +564,7 @@ const ParsedTable = memo(function ParsedTable({
                     onClick={() => setShowAdvancedSearch(!showAdvancedSearch)}
                     title="Расширенный поиск"
                   >
-                    🔍
+                    Расширенный поиск
                   </button>
                 </div>
                 {showAdvancedSearch && (
@@ -794,7 +794,7 @@ const ParsedTable = memo(function ParsedTable({
                   onClick={() => setShowColumnSettings(!showColumnSettings)}
                   title="Настройки колонок"
                 >
-                  ⚙️ Колонки
+                  Колонки
                 </button>
                 <div className="export-controls">
                   <label className="checkbox-inline">
@@ -925,13 +925,13 @@ const ParsedTable = memo(function ParsedTable({
             items={[
               {
                 label: selectedItems.includes(contextMenu.item.id) ? 'Снять выбор' : 'Выбрать',
-                icon: selectedItems.includes(contextMenu.item.id) ? '☐' : '☑️',
+                icon: '',
                 onClick: () => handleCheckboxChange(contextMenu.item.id, !selectedItems.includes(contextMenu.item.id)),
                 shortcut: 'Space',
               },
               {
                 label: 'Копировать название',
-                icon: '📋',
+                icon: '',
                 onClick: () => {
                   navigator.clipboard.writeText(contextMenu.item.beer_name || '');
                   toast.success('Название скопировано');
@@ -939,7 +939,7 @@ const ParsedTable = memo(function ParsedTable({
               },
               {
                 label: 'Экспортировать',
-                icon: '📥',
+                icon: '',
                 onClick: () => {
                   // Экспорт одной позиции
                   const exportData = [contextMenu.item];

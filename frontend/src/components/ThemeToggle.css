@@ -5,10 +5,12 @@
 .theme-toggle {
   background: rgba(255, 255, 255, 0.2);
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  width: 44px;
+  border-radius: var(--radius-sm);
+  min-width: 44px;
   height: 44px;
-  font-size: var(--font-xl);
+  padding: 0 var(--spacing-sm);
+  font-size: var(--font-sm);
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -21,6 +23,6 @@
 .theme-toggle:hover {
   border-color: rgba(255, 255, 255, 0.5);
   background-color: rgba(255, 255, 255, 0.3);
-  transform: rotate(15deg) scale(1.1);
+  transform: scale(1.03);
 }
 

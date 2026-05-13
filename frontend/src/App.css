@@ -12,6 +12,7 @@
   color: white;
   padding: var(--spacing-xl);
   box-shadow: var(--shadow-md);
+  padding-top: calc(var(--spacing-xl) + var(--safe-top));
 }
 
 .App-header .header-content {
@@ -20,12 +21,17 @@
   align-items: center;
   max-width: 1600px;
   margin: 0 auto;
+  gap: var(--spacing-md);
+  flex-wrap: nowrap;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .btn-logout-header {
@@ -303,25 +309,95 @@
   border-left: 4px solid var(--success-color);
 }
 
-/* Адаптивность */
-@media (max-width: 768px) {
+/* Адаптивность: маленькие ноутбуки и узкие десктопы */
+@media (max-width: 1280px) {
+  .App-header {
+    padding: var(--spacing-lg);
+    padding-top: calc(var(--spacing-lg) + var(--safe-top));
+  }
+
+  .App-header h1 {
+    font-size: var(--font-2xl);
+  }
+}
+
+/* Адаптивность: планшеты */
+@media (max-width: 1024px) {
   .App-main {
-    padding: 0 var(--spacing-sm);
-    margin: var(--spacing-md) 0;
+    padding: 0 var(--spacing-md);
   }
-  
+}
+
+/* Адаптивность: мобильные */
+@media (max-width: 768px) {
+  .App-header {
+    padding: var(--spacing-md);
+    padding-top: calc(var(--spacing-md) + var(--safe-top));
+  }
+
+  .App-header h1 {
+    font-size: 1.25rem;
+    letter-spacing: 0;
+  }
+
+  /* Подзаголовок прячем — на мобилке экранное место дороже. */
+  .App-header p {
+    display: none;
+  }
+
+  .App-header .header-content {
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .header-actions {
+    gap: 0.4rem;
+  }
+
+  .btn-logout-header,
+  .btn-admin-header {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* На мобиле верхнюю навигацию скрываем — её заменит BottomTabBar. */
   .App-nav {
-    flex-direction: column;
-    gap: var(--spacing-xs);
+    display: none;
   }
-  
-  .App-nav button {
-    width: 100%;
-    text-align: center;
+
+  .App-main {
+    padding: var(--spacing-md) var(--spacing-sm);
+    margin: 0 auto;
+    /* Резервируем место под нижний таб-бар, чтобы контент не уезжал под него. */
+    padding-bottom: calc(var(--bottom-tabbar-h) + var(--safe-bottom) + var(--spacing-md));
   }
-  
+
   .card {
     padding: var(--spacing-md);
+  }
+
+  /*
+   * Таблицы (общий класс .table из App.css). Если конкретный компонент
+   * не реализует свой адаптив, как минимум таблица не должна вылезать
+   * за вьюпорт — даём горизонтальный скролл оборачивающему контейнеру.
+   */
+  .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 480px) {
+  .App-header h1 {
+    font-size: 1.1rem;
+  }
+
+  .btn-logout-header,
+  .btn-admin-header {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.5rem;
   }
 }
 

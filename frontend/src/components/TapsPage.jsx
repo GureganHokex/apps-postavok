@@ -33,6 +33,97 @@ function splitBeerDisplay(line) {
   return { brewery: '', beer: line.trim() };
 }
 
+function stripTrailingPriceFromBeerLabel(beer) {
+  return (beer || '').replace(/\s*\(\d+\)\s*$/, '').trim();
+}
+
+function shortDescriptionForMeta(desc) {
+  const t = (desc || '').trim();
+  if (!t || t.length > 96 || t.includes('\n')) return '';
+  return t;
+}
+
+function formatAbvPresentation(text) {
+  const t = (text || '').trim();
+  if (!t) return '';
+  if (/\babv\b/i.test(t)) return t;
+  if (/%/.test(t)) return `${t.replace(/\s+$/, '')} ABV`;
+  return `${t}% ABV`;
+}
+
+function formatIbuPresentation(text) {
+  const t = (text || '').trim();
+  if (!t) return '';
+  if (/\bibu\b/i.test(t)) return t;
+  if (/^\d+(\.\d+)?$/.test(t)) return `${t} IBU`;
+  return t;
+}
+
+/** Стиль • ABV • IBU: при коротком описании считаем его стилем; пивоварню не дублируем (она над заголовком). */
+function presentationMetaSegments(tap, descShort) {
+  const parts = [];
+  if (descShort) parts.push(descShort);
+  const abv = formatAbvPresentation(tap.abv_text);
+  const ibu = formatIbuPresentation(tap.bitterness_ibu);
+  if (abv) parts.push(abv);
+  if (ibu) parts.push(ibu);
+  return parts;
+}
+
+function presentationPriceLine(tap) {
+  const raw = (tap.volume_price_text || '').trim();
+  if (raw) {
+    const segments = raw.split(/\s*\|\s*/).filter(Boolean);
+    const v = segments.length > 1 ? (segments[0] || '').trim() : raw;
+    return v || raw;
+  }
+  if (tap.price_per_liter != null && tap.price_per_liter !== '') {
+    const p = Math.round(Number(tap.price_per_liter));
+    if (!Number.isNaN(p)) return `${p} ₽`;
+  }
+  return '';
+}
+
+/** Краткий текст ошибки DRF для toast */
+function formatApiError(err, fallback) {
+  const data = err?.response?.data;
+  if (!data) return fallback;
+  if (typeof data === 'string') return data;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) return data.detail.filter(Boolean).join(' ') || fallback;
+  if (typeof data === 'object') {
+    const parts = [];
+    for (const [k, v] of Object.entries(data)) {
+      if (k === 'detail') continue;
+      const val = Array.isArray(v) ? v.filter(Boolean).join(' ') : String(v);
+      if (val) parts.push(`${k}: ${val}`);
+    }
+    if (parts.length) return parts.join(' · ');
+  }
+  return fallback;
+}
+
+/** Колонки полноэкранной доски (фиксированно три). */
+const PRESENTATION_COLUMN_COUNT = 3;
+
+/** Колонки как при column-flow: сверху вниз, слева направо; без пустых «ячеек» внизу короткой колонки. */
+function buildPresentationColumns(taps, colCount) {
+  const n = taps.length;
+  if (n === 0) return [];
+  const c = Math.max(1, Math.min(colCount, n));
+  const rows = Math.ceil(n / c);
+  const columns = [];
+  for (let col = 0; col < c; col += 1) {
+    const colTaps = [];
+    for (let row = 0; row < rows; row += 1) {
+      const idx = row + col * rows;
+      if (idx < n) colTaps.push(taps[idx]);
+    }
+    columns.push(colTaps);
+  }
+  return columns;
+}
+
 function TapsPage() {
   const { role, isAdmin } = useAuth();
   const isMobile = useIsMobile();
@@ -140,40 +231,49 @@ function TapsPage() {
   };
 
   const saveUntappdFields = async () => {
-    if (!detailsTap || !isAdmin) return;
+    if (!detailsTap || !canEditTapsContent) return;
     setIsSavingUntappd(true);
+    const volume_price_text = (untappdVolumePrice || '').trim().slice(0, 200);
+    const bitterness_ibu = (untappdIbu || '').trim().slice(0, 64);
+    const abv_text = (untappdAbv || '').trim().slice(0, 32);
     try {
       const updated = await updateTap(detailsTap.id, {
-        volume_price_text: untappdVolumePrice,
-        bitterness_ibu: untappdIbu,
-        abv_text: untappdAbv,
+        volume_price_text,
+        bitterness_ibu,
+        abv_text,
       });
       mergeTapIntoActiveLocation(updated);
       setDetailsTap((prev) => (prev ? { ...prev, ...updated } : prev));
+      setUntappdVolumePrice(updated.volume_price_text || '');
+      setUntappdIbu(updated.bitterness_ibu || '');
+      setUntappdAbv(updated.abv_text || '');
       toast.success('Характеристики сохранены');
     } catch (err) {
-      toast.error('Не удалось сохранить');
+      toast.error(formatApiError(err, 'Не удалось сохранить'));
     } finally {
       setIsSavingUntappd(false);
     }
   };
 
-  // Загрузка локаций
+  // Загрузка локаций (только при монтировании; не привязываем к activeLocationId — иначе при каждом переключении локации лишний запрос к API)
   const loadLocations = useCallback(async () => {
     try {
       const data = await getLocations();
       const locationsList = data.results || data;
       setLocations(locationsList);
-      
-      if (locationsList.length > 0 && !activeLocationId) {
-        setActiveLocationId(locationsList[0].id);
-      }
+
+      setActiveLocationId((prev) => {
+        if (locationsList.length > 0 && !prev) {
+          return locationsList[0].id;
+        }
+        return prev;
+      });
     } catch (err) {
       toast.error('Ошибка загрузки локаций');
     } finally {
       setIsLoading(false);
     }
-  }, [activeLocationId]);
+  }, []);
 
   // Загрузка активной локации с кранами
   const loadActiveLocation = useCallback(async () => {
@@ -581,6 +681,12 @@ function TapsPage() {
     if (!filteredTaps.length) return [];
     return filteredTaps.filter((t) => t.is_visible !== false);
   }, [filteredTaps]);
+
+  // Ровно 3 колонки на доске: см. PRESENTATION_COLUMN_COUNT (без usePresentationColumnCount)
+  const presentationColumns = useMemo(
+    () => buildPresentationColumns(presentationTaps, PRESENTATION_COLUMN_COUNT),
+    [presentationTaps],
+  );
 
   // Сдвиг очереди (текущее -> архив, след1 -> текущее, след2 -> след1)
   const handleShiftQueue = async (tap) => {
@@ -1144,30 +1250,33 @@ function TapsPage() {
                   <dd>{detailsTap.beer_name || detailsTap.current_beer || 'Не указано'}</dd>
                 </div>
                 <div>
-                  <dt>Цена</dt>
-                  <dd>{detailsTap.price_per_liter ? `${Math.round(detailsTap.price_per_liter)} ₽` : 'Не указана'}</dd>
-                </div>
-                <div>
-                  <dt>Объём / цена (экран)</dt>
+                  <dt>Объём / цена (ТВ и меню)</dt>
                   <dd>
-                    {isAdmin ? (
+                    {canEditTapsContent ? (
                       <input
                         type="text"
                         className="tap-details-inline-input"
                         value={untappdVolumePrice}
                         onChange={(e) => setUntappdVolumePrice(e.target.value)}
-                        placeholder="Например: 30 л · 420 ₽"
+                        placeholder="Например: 400 мл / 350 ₽ · 250 мл / 250 ₽"
                         disabled={isSavingUntappd}
+                        maxLength={200}
                       />
                     ) : (
                       detailsTap.volume_price_text || '—'
                     )}
                   </dd>
                 </div>
+                {isAdmin && (detailsTap.price_per_liter != null && detailsTap.price_per_liter !== '') ? (
+                  <div className="tap-details-price-internal">
+                    <dt>Справочно (за литр)</dt>
+                    <dd>{`${Math.round(detailsTap.price_per_liter)} ₽/л`}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Горечь (IBU)</dt>
                   <dd>
-                    {isAdmin ? (
+                    {canEditTapsContent ? (
                       <input
                         type="text"
                         className="tap-details-inline-input"
@@ -1175,6 +1284,7 @@ function TapsPage() {
                         onChange={(e) => setUntappdIbu(e.target.value)}
                         placeholder="IBU"
                         disabled={isSavingUntappd}
+                        maxLength={64}
                       />
                     ) : (
                       detailsTap.bitterness_ibu || '—'
@@ -1184,7 +1294,7 @@ function TapsPage() {
                 <div>
                   <dt>Алкоголь (ABV)</dt>
                   <dd>
-                    {isAdmin ? (
+                    {canEditTapsContent ? (
                       <input
                         type="text"
                         className="tap-details-inline-input"
@@ -1192,6 +1302,7 @@ function TapsPage() {
                         onChange={(e) => setUntappdAbv(e.target.value)}
                         placeholder="Например: 5.2 %"
                         disabled={isSavingUntappd}
+                        maxLength={32}
                       />
                     ) : (
                       detailsTap.abv_text || '—'
@@ -1240,7 +1351,7 @@ function TapsPage() {
                 </div>
               </dl>
 
-              {isAdmin && (
+              {canEditTapsContent && (
                 <div className="tap-details-untappd-actions">
                   <button
                     type="button"
@@ -1296,42 +1407,63 @@ function TapsPage() {
           >
             Выйти
           </button>
-          <div className="taps-presentation-grid">
+          <div className="taps-presentation-body">
             {presentationTaps.length === 0 ? (
               <p className="taps-presentation-empty">
                 Нет позиций для доски: включите «Экран» у кранов в таблице или снимите поиск.
               </p>
             ) : (
-              presentationTaps.map((tap) => {
-                const line = tap.current_beer || '—';
-                const { brewery, beer } = splitBeerDisplay(line);
-                return (
-                  <article key={tap.id} className="taps-presentation-card">
-                    <span className="taps-presentation-num" aria-hidden="true">
-                      {tap.position}
-                    </span>
-                    {brewery ? (
-                      <>
-                        <span className="taps-presentation-brewery">{brewery}</span>
-                        <span className="taps-presentation-beer">{beer}</span>
-                      </>
-                    ) : (
-                      <span className="taps-presentation-beer taps-presentation-beer--solo">{beer}</span>
-                    )}
-                    {[tap.volume_price_text, tap.bitterness_ibu, tap.abv_text].filter(Boolean).length > 0 && (
-                      <div className="taps-presentation-meta">
-                        {[tap.volume_price_text, tap.bitterness_ibu, tap.abv_text]
-                          .filter(Boolean)
-                          .map((text, idx) => (
-                            <span key={idx} className="taps-presentation-meta__item">
-                              {text}
-                            </span>
-                          ))}
-                      </div>
-                    )}
-                  </article>
-                );
-              })
+              <div className="taps-presentation-list">
+                {presentationColumns.map((colTaps, colIdx) => (
+                  <div
+                    key={`presentation-col-${colIdx}`}
+                    className="taps-presentation-column"
+                    role="presentation"
+                  >
+                    {colTaps.map((tap) => {
+                      const line = tap.current_beer || '—';
+                      const split = splitBeerDisplay(line);
+                      const brewery = (tap.brewery || '').trim() || split.brewery;
+                      const beerNameRaw =
+                        (tap.beer_name || '').trim() ||
+                        stripTrailingPriceFromBeerLabel(split.beer) ||
+                        split.beer;
+                      const beerTitle = beerNameRaw === '' ? '—' : beerNameRaw;
+                      const descShort = shortDescriptionForMeta(tap.description);
+                      const metaParts = presentationMetaSegments(tap, descShort);
+                      const priceLine = presentationPriceLine(tap);
+                      return (
+                        <article key={tap.id} className="taps-presentation-row">
+                          <div className="taps-presentation-row__body">
+                            {brewery ? (
+                              <div className="taps-presentation-row__brewery">{brewery}</div>
+                            ) : null}
+                            <h2 className="taps-presentation-row__title">
+                              <span className="taps-presentation-row__num">{tap.position}.</span>{' '}
+                              {beerTitle}
+                            </h2>
+                            {metaParts.length > 0 ? (
+                              <div className="taps-presentation-row__meta">
+                                {metaParts.map((text, idx) => (
+                                  <span
+                                    key={`${tap.id}-m-${idx}`}
+                                    className="taps-presentation-row__meta-item"
+                                  >
+                                    {text}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                            {priceLine ? (
+                              <div className="taps-presentation-row__prices">{priceLine}</div>
+                            ) : null}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

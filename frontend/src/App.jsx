@@ -371,14 +371,14 @@ function AppContent({ fullAccess = false, role = 'user' }) {
         </nav>
 
       <main className="App-main">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           {(activeTab === 'upload' || activeTab === 'parse') && (
             <motion.div
               key="upload"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <FileUpload
                 onFileUploaded={handleFileUploaded}
@@ -393,7 +393,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
               className="items-full-width"
             >
               <ParsedTable
@@ -414,7 +414,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <MetadataTab metadata={metadata} />
             </motion.div>
@@ -426,7 +426,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <OrderForm
                 fileId={currentFile.id}
@@ -442,7 +442,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <OrdersHistory />
             </motion.div>
@@ -454,7 +454,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <StatisticsDashboard items={items} />
             </motion.div>
@@ -466,7 +466,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <TapsPage />
             </motion.div>
@@ -478,7 +478,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <SupplierSettings />
             </motion.div>

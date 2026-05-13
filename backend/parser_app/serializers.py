@@ -152,6 +152,10 @@ class TapSerializer(serializers.ModelSerializer):
         if obj.beer_name:
             parts.append(obj.beer_name)
         result = ' | '.join(parts)
+        # Цена в скобках — из price_per_liter; если задана строка объём/цена для экрана, не подмешиваем «за литр» (часто другая величина).
+        vp = (obj.volume_price_text or '').strip()
+        if vp:
+            return result
         if obj.price_per_liter:
             result += f'({int(obj.price_per_liter)})'
         return result
@@ -174,6 +178,9 @@ class AvailableBeerSerializer(serializers.ModelSerializer):
     def get_display_name(self, obj):
         """Возвращает строку 'Пивоварня | Название(Цена)'."""
         result = f"{obj.brewery} | {obj.beer_name}"
+        vp = (obj.volume_price_text or '').strip()
+        if vp:
+            return result
         if obj.price_per_liter:
             result += f'({int(obj.price_per_liter)})'
         return result

@@ -1285,28 +1285,174 @@ td:hover .clear-btn {
   white-space: nowrap;
 }
 
-/* Полноэкранная доска (Untappd-подобная) */
+.tap-details-price-internal dt,
+.tap-details-price-internal dd {
+  font-size: 0.8rem;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+}
+
+.tap-details-price-internal dd {
+  margin-top: 0.15rem;
+}
+
+/* Полноэкранная доска: сетка на всю высоту экрана (равные строки по вертикали) */
 .taps-presentation-root {
   position: fixed;
   inset: 0;
   z-index: 10000;
   box-sizing: border-box;
-  background: linear-gradient(165deg, #0c0a08 0%, #1c1712 42%, #0e0c0a 100%);
-  color: #f8f1e7;
-  display: block;
-  padding: clamp(16px, 2.5vw, 40px);
-  padding-top: max(clamp(16px, 2.5vw, 40px), env(safe-area-inset-top));
-  overflow: auto;
+  background:
+    radial-gradient(ellipse 130% 70% at 50% -25%, rgba(120, 82, 56, 0.22) 0%, transparent 52%),
+    radial-gradient(ellipse 85% 55% at 100% 105%, rgba(38, 58, 88, 0.2) 0%, transparent 48%),
+    linear-gradient(168deg, #171512 0%, #1f1c18 42%, #131210 100%);
+  color: #f5f1eb;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 100vh;
+  padding: clamp(10px, 1.2vmin, 28px);
+  padding-top: max(clamp(10px, 1.2vmin, 28px), env(safe-area-inset-top));
+  padding-left: max(clamp(10px, 1.2vmin, 28px), env(safe-area-inset-left));
+  padding-right: max(clamp(10px, 1.2vmin, 28px), env(safe-area-inset-right));
+  padding-bottom: max(clamp(10px, 1.2vmin, 28px), env(safe-area-inset-bottom));
+  overflow: hidden;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: clamp(14px, 0.5vmin + 9px, 26px);
+  -webkit-font-smoothing: antialiased;
+}
+
+.taps-presentation-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: min(2400px, 100%);
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 0 clamp(0px, 1vw, 12px);
+  overflow: auto;
+}
+
+.taps-presentation-list {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: clamp(0.65rem, 1.6vmin, 1.5rem);
+}
+
+.taps-presentation-column {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.3rem, 0.9vmin, 0.55rem);
+}
+
+.taps-presentation-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  opacity: 0.65;
+  line-height: 1.5;
+}
+
+.taps-presentation-row {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(0.2em, 0.55vmin, 0.5em) 0;
+  box-sizing: border-box;
+  border-top: 1px solid rgba(255, 210, 170, 0.08);
+}
+
+.taps-presentation-column .taps-presentation-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.taps-presentation-row__body {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.taps-presentation-row__brewery {
+  font-size: 0.72em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 232, 210, 0.5);
+  margin-bottom: 0.2em;
+  line-height: 1.2;
+}
+
+.taps-presentation-row__title {
+  margin: 0;
+  font-size: 1.12em;
+  line-height: 1.25;
+  color: #fffefb;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.taps-presentation-row__num {
+  font-weight: 800;
+  color: rgba(255, 214, 160, 0.95);
+  margin-right: 0.15em;
+}
+
+.taps-presentation-row__meta {
+  margin-top: 0.35em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.15em;
+  font-size: 0.84em;
+  color: rgba(255, 235, 215, 0.55);
+  line-height: 1.45;
+}
+
+.taps-presentation-row__meta-item:not(:last-child)::after {
+  content: '·';
+  margin: 0 0.4em;
+  opacity: 0.55;
+  font-weight: 400;
+}
+
+.taps-presentation-row__prices {
+  margin-top: 0.4em;
+  font-size: 0.88em;
+  color: rgba(255, 228, 200, 0.62);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taps-presentation-exit {
-  padding: 8px 14px;
+  padding: clamp(6px, 0.35em, 10px) clamp(12px, 0.65em, 18px);
   border-radius: 999px;
   border: 1px solid rgba(255, 200, 120, 0.35);
   background: rgba(255, 255, 255, 0.06);
   color: #ffe8c8;
-  font-size: 0.85rem;
+  font-size: clamp(0.75rem, 0.85em, 1rem);
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s, background 0.2s, border-color 0.2s;
@@ -1325,85 +1471,6 @@ td:hover .clear-btn {
   opacity: 1;
   background: rgba(255, 200, 120, 0.12);
   border-color: rgba(255, 200, 120, 0.55);
-}
-
-.taps-presentation-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: clamp(12px, 1.8vw, 22px);
-  align-content: start;
-  min-height: min(100%, 100vh);
-}
-
-.taps-presentation-empty {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 2rem 1rem;
-  text-align: center;
-  font-size: clamp(1rem, 2vw, 1.2rem);
-  opacity: 0.65;
-  line-height: 1.5;
-}
-
-.taps-presentation-card {
-  position: relative;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 180, 90, 0.2);
-  border-radius: 18px;
-  padding: clamp(16px, 2vw, 26px) clamp(18px, 2.2vw, 28px);
-  padding-left: clamp(48px, 5vw, 62px);
-  min-height: 110px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.25rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-}
-
-.taps-presentation-num {
-  position: absolute;
-  left: clamp(12px, 1.6vw, 20px);
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: clamp(1.6rem, 3.2vw, 2.35rem);
-  font-weight: 800;
-  color: #ffb347;
-  line-height: 1;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
-}
-
-.taps-presentation-brewery {
-  font-size: clamp(0.78rem, 1.25vw, 0.95rem);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 224, 180, 0.72);
-}
-
-.taps-presentation-beer {
-  font-size: clamp(1.05rem, 2.1vw, 1.55rem);
-  font-weight: 600;
-  line-height: 1.25;
-  color: #fffaf3;
-}
-
-.taps-presentation-beer--solo {
-  font-size: clamp(1.15rem, 2.3vw, 1.65rem);
-}
-
-.taps-presentation-meta {
-  margin-top: 0.65rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
-  font-size: clamp(0.78rem, 1.25vw, 0.95rem);
-  color: rgba(255, 235, 200, 0.78);
-}
-
-.taps-presentation-meta__item:not(:last-child)::after {
-  content: '·';
-  margin-left: 0.75rem;
-  opacity: 0.5;
 }
 
 .tap-details-inline-input {

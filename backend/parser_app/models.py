@@ -580,6 +580,13 @@ class Tap(models.Model):
         verbose_name='Алкоголь (ABV)',
         help_text='Например «5.2 %»',
     )
+    label_image_url = models.CharField(
+        max_length=600,
+        blank=True,
+        default='',
+        verbose_name='Обложка (URL)',
+        help_text='Ссылка на изображение этикетки, например с Untappd',
+    )
     # Очередь - следующие позиции
     next_beer_1 = models.CharField(
         max_length=500,
@@ -682,6 +689,13 @@ class AvailableBeer(models.Model):
         blank=True,
         default='',
         verbose_name='Алкоголь (ABV)',
+    )
+    label_image_url = models.CharField(
+        max_length=600,
+        blank=True,
+        default='',
+        verbose_name='Обложка (URL)',
+        help_text='Ссылка на изображение этикетки (Untappd и т.п.)',
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

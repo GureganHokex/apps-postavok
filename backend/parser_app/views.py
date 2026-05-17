@@ -12,6 +12,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Count
 from django.http import FileResponse, JsonResponse
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
@@ -716,6 +717,16 @@ class TapLocationViewSet(viewsets.ModelViewSet):
     authentication_classes = [SessionAuthenticationNoCSRF]
     queryset = TapLocation.objects.prefetch_related('taps', 'available_beers')
 
+    def get_queryset(self):
+        """
+        Список локаций не тянет краны в память: один запрос + COUNT, без SELECT по таблице кранов.
+        Так страница кранов открывается даже если миграции кранов отстают (иначе prefetch падал бы на новых колонках).
+        """
+        base = TapLocation.objects.all()
+        if getattr(self, 'action', None) == 'list':
+            return base.annotate(taps_count=Count('taps'))
+        return base.prefetch_related('taps', 'available_beers')
+
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated()]
@@ -1009,6 +1020,45 @@ class TapViewSet(viewsets.ModelViewSet):
             })
         
         return Response(history_data)
+
+    @action(detail=True, methods=['post'], url_path='fetch_untappd_label')
+    def fetch_untappd_label(self, request, pk=None):
+        """
+        Подставить URL обложки с Untappd (поиск по названию и пивоварне на странице пива).
+
+        POST /api/taps/<id>/fetch_untappd_label/
+        """
+        role = get_user_role(request.user)
+        if role == UserProfile.ROLE_USER:
+            return Response(
+                {'detail': 'Недостаточно прав для изменения кранов.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        tap = self.get_object()
+        beer_name = (tap.beer_name or '').strip()
+        if not beer_name:
+            return Response(
+                {'detail': 'Укажите название пива на кране, чтобы искать на Untappd.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        brewery = (tap.brewery or '').strip() or None
+        try:
+            client = UntappdClient()
+            image_url = client.get_beer_label_image_url(beer_name, brewery)
+        except Exception as e:
+            logger.exception('fetch_untappd_label')
+            return Response(
+                {'detail': f'Ошибка при обращении к Untappd: {e}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        if not image_url:
+            return Response(
+                {'detail': 'Не удалось найти обложку: проверьте название и пивоварню или задайте ссылку вручную через API.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        tap.label_image_url = image_url[:600]
+        tap.save(update_fields=['label_image_url'])
+        return Response(TapSerializer(tap).data)
 
 
 class AvailableBeerViewSet(viewsets.ModelViewSet):

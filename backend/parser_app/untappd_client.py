@@ -222,3 +222,163 @@ class UntappdClient:
         
         return None
 
+    @staticmethod
+    def _is_untappd_social_share_image_url(url: str) -> bool:
+        """Карточка для соцсетей (1200×630), не квадратная этикетка с банки."""
+        u = (url or '').lower()
+        return 'next.untappd.com/og/' in u or '/og/beer/' in u
+
+    def _is_usable_label_image_url(self, url: str) -> bool:
+        if not url or len(url) < 12:
+            return False
+        if not url.startswith(('http://', 'https://')):
+            return False
+        if self._is_untappd_social_share_image_url(url):
+            return False
+        u = url.lower()
+        skip = (
+            'badge-beer-default',
+            'beer-default',
+            'brewery-default',
+            'default_avatar',
+            '/temp/',
+            'placeholder',
+            'blank.gif',
+            '/badges/',
+            '/profile/',
+            '_100x100',
+            '_50x50',
+        )
+        return not any(s in u for s in skip)
+
+    def _label_image_url_rank(self, url: str) -> int:
+        """Выше — лучше: HD-этикетка с CDN, ниже — og-превью и прочее."""
+        u = (url or '').lower()
+        if self._is_untappd_social_share_image_url(url):
+            return -1000
+        if 'assets.untappd.com/site/beer_logos_hd/' in u:
+            return 500
+        if '/site/beer_logos/beer-' in u and '_hd.' in u:
+            return 450
+        if '/site/beer_logos/beer-' in u and '_sm.' in u:
+            return 200
+        if '/site/beer_logos/beer-' in u:
+            return 250
+        if 'assets.untappd.com' in u and 'brewery' in u:
+            return 40
+        if 'untp.beer' in u or 'untappd.s3.amazonaws.com' in u:
+            return 25
+        return 10
+
+    def _collect_label_image_candidates(self, soup: BeautifulSoup) -> list:
+        """Собирает URL картинок со страницы пива (CDN Untappd)."""
+        seen = set()
+        out: list = []
+
+        def add(raw: str):
+            u = (raw or '').strip()
+            if not u or not u.startswith('http'):
+                return
+            u = u.split('#')[0].strip()
+            base = u.split('?')[0].strip()
+            if base in seen:
+                return
+            seen.add(base)
+            out.append(base)
+
+        html = str(soup)
+        for pat in (
+            r'https://assets\.untappd\.com/site/beer_logos_hd/[a-zA-Z0-9_\-]+\.(?:jpe?g|png|webp)',
+            r'https://assets\.untappd\.com/site/beer_logos/beer-\d+_[a-zA-Z0-9]+_hd\.(?:jpe?g|png|webp)',
+            r'https://assets\.untappd\.com/site/beer_logos/beer-\d+_[a-zA-Z0-9]+(?:_sm|_md)?\.(?:jpe?g|png|webp)',
+        ):
+            try:
+                for m in re.findall(pat, html, flags=re.I):
+                    add(m)
+            except Exception:
+                pass
+
+        try:
+            for tag in soup.find_all(['img', 'source']):
+                for attr in ('src', 'data-src', 'data-original', 'data-lazy'):
+                    v = tag.get(attr)
+                    if v and 'untappd' in v.lower():
+                        add(v.strip())
+                srcset = tag.get('srcset')
+                if srcset:
+                    for chunk in srcset.split(','):
+                        chunk = chunk.strip()
+                        if not chunk:
+                            continue
+                        part = chunk.split()[0].strip()
+                        if 'untappd' in part.lower():
+                            add(part)
+        except Exception:
+            pass
+
+        for meta in soup.find_all('meta', attrs={'property': 'og:image'}):
+            c = (meta.get('content') or '').strip()
+            if c and not self._is_untappd_social_share_image_url(c):
+                add(c)
+        for meta in soup.find_all('meta', attrs={'name': 'twitter:image'}):
+            c = (meta.get('content') or '').strip()
+            if c and not self._is_untappd_social_share_image_url(c):
+                add(c)
+        link_img = soup.find('link', rel=re.compile(r'image_src', re.I))
+        if link_img and link_img.get('href'):
+            h = link_img.get('href', '').strip()
+            if h and not self._is_untappd_social_share_image_url(h):
+                add(h)
+
+        return out
+
+    def _extract_label_image_url(self, soup: BeautifulSoup) -> Optional[str]:
+        """
+        URL квадратной этикетки (beer_logos_hd / beer_logos), не og-карточка next.untappd.com/og/beer/… .
+        """
+        candidates = self._collect_label_image_candidates(soup)
+        usable = [u for u in candidates if self._is_usable_label_image_url(u)]
+        if not usable:
+            return None
+        usable.sort(key=lambda u: self._label_image_url_rank(u), reverse=True)
+        best = usable[0]
+        return best[:600] if best else None
+
+    def get_beer_label_image_url(self, beer_name: str, brewery_name: Optional[str] = None) -> Optional[str]:
+        """
+        Ищет первое совпадение на Untappd и возвращает URL обложки (без эвристики стиля).
+        Публичный поиск + страница пива; между запросами соблюдается rate limit.
+        """
+        if not beer_name or not str(beer_name).strip():
+            return None
+        try:
+            self._wait_for_rate_limit()
+            clean_beer_name = self._clean_beer_name(beer_name)
+            query = f"{brewery_name} {clean_beer_name}".strip() if brewery_name else clean_beer_name
+            params = {'q': query, 'type': 'beer'}
+            response = self.session.get(self.SEARCH_URL, params=params, timeout=15)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'lxml')
+            beer_links = soup.find_all('a', href=re.compile(r'/b/[^/]+/[^/]+'))
+            if not beer_links:
+                logger.debug(f"Untappd search: нет ссылок на пиво для {query!r}")
+                return None
+            beer_url = beer_links[0].get('href')
+            if beer_url and not beer_url.startswith('http'):
+                beer_url = f"{self.BASE_URL}{beer_url}"
+            time.sleep(1)
+            self._wait_for_rate_limit()
+            beer_response = self.session.get(beer_url, timeout=15)
+            if beer_response.status_code != 200:
+                return None
+            page_soup = BeautifulSoup(beer_response.text, 'lxml')
+            url = self._extract_label_image_url(page_soup)
+            if url:
+                logger.info(f"Untappd label URL: {beer_name!r} -> {url[:96]}...")
+            return url
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Untappd label: сеть: {e}")
+        except Exception as e:
+            logger.warning(f"Untappd label: {e}")
+        return None
+

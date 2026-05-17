@@ -85,7 +85,8 @@ function humanizeIfHtmlErrorBody(str, status) {
   }
   return (
     `Сервер вернул ошибку (${code}), тело ответа — HTML (часто страница ошибки Django), а не JSON. ` +
-    'Откройте логи веб-сервиса на Render (Logs) — там traceback и причина.'
+    'Откройте логи веб-сервиса на Render (Logs) — там traceback и причина. ' +
+    'Часто: не выполнен `python manage.py migrate`, неверные переменные окружения или исключение в коде view.'
   );
 }
 
@@ -620,6 +621,14 @@ export const addTap = async (locationId, tapData) => {
  */
 export const updateTap = async (tapId, data) => {
   const response = await api.patch(`/taps/${tapId}/`, data);
+  return response.data;
+};
+
+/**
+ * Подтянуть URL обложки с Untappd (поиск по названию/пивоварне на кране).
+ */
+export const fetchTapUntappdLabel = async (tapId) => {
+  const response = await api.post(`/taps/${tapId}/fetch_untappd_label/`);
   return response.data;
 };
 

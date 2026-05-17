@@ -392,7 +392,17 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
         setSelectedLocationId(locationsList[0].id);
       }
     } catch (err) {
-      toast.error('Ошибка загрузки локаций');
+      console.error('loadLocationsForTaps', err);
+      const r = err?.response;
+      let suffix = '';
+      if (!r && (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error')) {
+        suffix = ': нет ответа сервера';
+      } else if (r?.data?.detail && typeof r.data.detail === 'string') {
+        suffix = `: ${r.data.detail}`;
+      } else if (r?.status) {
+        suffix = ` (HTTP ${r.status})`;
+      }
+      toast.error(`Ошибка загрузки локаций${suffix}`);
     }
   }, []);
 

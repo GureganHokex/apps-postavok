@@ -36,12 +36,20 @@ def _load_dotenv_paths():
 
 _load_dotenv_paths()
 
+# Движок БД (нужен до DEBUG: локальный SQLite без DJANGO_DEBUG в .env → включаем DEBUG для http://localhost).
+DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite3').lower()
+
 # Секрет и режим дебага берём из окружения
 SECRET_KEY = os.getenv(
     'DJANGO_SECRET_KEY',
     'django-insecure-mvp-development-key-change-in-production',
 )
-DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() == 'true'
+_django_debug_raw = os.getenv('DJANGO_DEBUG')
+if _django_debug_raw is not None:
+    DEBUG = _django_debug_raw.lower() == 'true'
+else:
+    # Нет явного DJANGO_DEBUG: SQLite считаем локальной разработкой (иначе сессия на http ломается).
+    DEBUG = DB_ENGINE in ('sqlite3', 'sqlite')
 
 # Разрешённые хосты и доверенные источники
 # strip() важен: в env после запятой часто пробел («.onrender.com, .vercel.app») — иначе « .vercel.app»
@@ -106,9 +114,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'beer_app.wsgi.application'
 
-# Database
-DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite3').lower()
-
+# Database (DB_ENGINE задан выше, рядом с DEBUG)
 if DB_ENGINE in {'postgres', 'postgresql', 'psql'}:
     db_options = {}
     db_sslmode = os.getenv('DB_SSLMODE')
@@ -169,6 +175,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Настройки DRF
 REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'parser_app.api_exceptions.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -272,6 +279,14 @@ if not DEBUG:
     CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'None')
     # Продлевает сессию при каждом запросе (долгий парс + следующий XHR не «теряют» cookie по краю TTL).
     SESSION_SAVE_EVERY_REQUEST = os.getenv('SESSION_SAVE_EVERY_REQUEST', 'true').lower() == 'true'
+
+# Локальный SQLite по http://localhost — cookie с Secure=True браузер не шлёт; сессия «отваливается».
+if DATABASES['default']['ENGINE'].endswith('sqlite3'):
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    USE_X_FORWARDED_HOST = False
 
 # Учёт администратора (для админ-панели). В production задать ADMIN_PASSWORD в env.
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')

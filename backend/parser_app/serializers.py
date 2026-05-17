@@ -137,6 +137,7 @@ class TapSerializer(serializers.ModelSerializer):
         fields = ['id', 'location', 'position', 'brewery',
                  'beer_name', 'price_per_liter', 'description',
                  'volume_price_text', 'bitterness_ibu', 'abv_text',
+                 'label_image_url',
                  'next_beer_1',
                  'next_beer_2', 'color_current', 'color_next1',
                  'color_next2', 'status', 'is_visible', 'current_beer', 'updated_at']
@@ -171,6 +172,7 @@ class AvailableBeerSerializer(serializers.ModelSerializer):
         fields = ['id', 'location', 'brewery', 'beer_name',
                  'price_per_liter', 'description',
                  'volume_price_text', 'bitterness_ibu', 'abv_text',
+                 'label_image_url',
                  'sort_order',
                  'display_name', 'created_at']
         read_only_fields = ['created_at']
@@ -207,14 +209,11 @@ class TapLocationSerializer(serializers.ModelSerializer):
 class TapLocationListSerializer(serializers.ModelSerializer):
     """Краткий serializer для списка локаций."""
     
-    taps_count = serializers.SerializerMethodField()
+    taps_count = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = TapLocation
         fields = ['id', 'name', 'created_at', 'taps_count']
-    
-    def get_taps_count(self, obj):
-        return obj.taps.count()
 
 
 # --- Управление пользователями (админ-панель) ---

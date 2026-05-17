@@ -18,6 +18,8 @@ import {
   exportLocationTaps,
   getAvailableBeers,
   reorderAvailableBeers,
+  fetchTapUntappdLabel,
+  getApiErrorMessage,
 } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../hooks/useBreakpoint';
@@ -84,23 +86,11 @@ function presentationPriceLine(tap) {
   return '';
 }
 
-/** Краткий текст ошибки DRF для toast */
+/** Текст для toast: JSON/HTML от DRF через getApiErrorMessage (api.js), без сырого HTML в UI. */
 function formatApiError(err, fallback) {
-  const data = err?.response?.data;
-  if (!data) return fallback;
-  if (typeof data === 'string') return data;
-  if (typeof data.detail === 'string') return data.detail;
-  if (Array.isArray(data.detail)) return data.detail.filter(Boolean).join(' ') || fallback;
-  if (typeof data === 'object') {
-    const parts = [];
-    for (const [k, v] of Object.entries(data)) {
-      if (k === 'detail') continue;
-      const val = Array.isArray(v) ? v.filter(Boolean).join(' ') : String(v);
-      if (val) parts.push(`${k}: ${val}`);
-    }
-    if (parts.length) return parts.join(' · ');
-  }
-  return fallback;
+  const apiMsg = getApiErrorMessage(err);
+  if (!apiMsg || apiMsg === 'Ошибка запроса') return fallback;
+  return `${fallback}: ${apiMsg}`;
 }
 
 /** Колонки полноэкранной доски (фиксированно три). */
@@ -159,6 +149,7 @@ function TapsPage() {
   const [untappdIbu, setUntappdIbu] = useState('');
   const [untappdAbv, setUntappdAbv] = useState('');
   const [isSavingUntappd, setIsSavingUntappd] = useState(false);
+  const [isFetchingUntappdImage, setIsFetchingUntappdImage] = useState(false);
   const [isPresentationOpen, setIsPresentationOpen] = useState(false);
   const presentationRef = useRef(null);
 
@@ -255,6 +246,33 @@ function TapsPage() {
     }
   };
 
+  const fetchUntappdLabelImage = async () => {
+    if (!detailsTap || !canEditTapsContent) return;
+    setIsFetchingUntappdImage(true);
+    try {
+      const updated = await fetchTapUntappdLabel(detailsTap.id);
+      mergeTapIntoActiveLocation(updated);
+      setDetailsTap((prev) => (prev ? { ...prev, ...updated } : prev));
+      toast.success('Обложка подтянута с Untappd');
+    } catch (err) {
+      toast.error(formatApiError(err, 'Не удалось получить обложку'));
+    } finally {
+      setIsFetchingUntappdImage(false);
+    }
+  };
+
+  const clearTapLabelImage = async () => {
+    if (!detailsTap || !canEditTapsContent) return;
+    try {
+      const updated = await updateTap(detailsTap.id, { label_image_url: '' });
+      mergeTapIntoActiveLocation(updated);
+      setDetailsTap((prev) => (prev ? { ...prev, ...updated } : prev));
+      toast.success('Обложка сброшена');
+    } catch (err) {
+      toast.error(formatApiError(err, 'Не удалось сбросить обложку'));
+    }
+  };
+
   // Загрузка локаций (только при монтировании; не привязываем к activeLocationId — иначе при каждом переключении локации лишний запрос к API)
   const loadLocations = useCallback(async () => {
     try {
@@ -269,7 +287,8 @@ function TapsPage() {
         return prev;
       });
     } catch (err) {
-      toast.error('Ошибка загрузки локаций');
+      console.error('loadLocations', err);
+      toast.error(formatApiError(err, 'Ошибка загрузки локаций'), { id: 'taps-locations-list' });
     } finally {
       setIsLoading(false);
     }
@@ -286,7 +305,10 @@ function TapsPage() {
       const data = await getLocation(activeLocationId);
       setActiveLocation(data);
     } catch (err) {
-      toast.error('Ошибка загрузки кранов');
+      console.error('loadActiveLocation', err);
+      toast.error(formatApiError(err, 'Не удалось загрузить краны'), {
+        id: 'taps-location-detail',
+      });
     }
   }, [activeLocationId]);
 
@@ -357,12 +379,7 @@ function TapsPage() {
       setIsAddingLocation(false);
       toast.success('Локация создана');
     } catch (err) {
-      const detail =
-        err.response?.data?.detail ||
-        (typeof err.response?.data === 'string' ? err.response.data : null) ||
-        err.response?.data?.error;
-      const msg = Array.isArray(detail) ? detail.map((d) => d || '').join(' ') : detail;
-      toast.error(msg ? `Ошибка создания локации: ${msg}` : 'Ошибка создания локации');
+      toast.error(formatApiError(err, 'Ошибка создания локации'));
     }
   };
 
@@ -606,6 +623,7 @@ function TapsPage() {
             volume_price_text: beer.volume_price_text || '',
             bitterness_ibu: beer.bitterness_ibu || '',
             abv_text: beer.abv_text || '',
+            label_image_url: beer.label_image_url || '',
             status: 'active',
           });
         } else {
@@ -715,6 +733,7 @@ function TapsPage() {
         volume_price_text: '',
         bitterness_ibu: '',
         abv_text: '',
+        label_image_url: '',
         status: newStatus,
         next_beer_1: tap.next_beer_2 || '',
         next_beer_2: '',
@@ -905,7 +924,16 @@ function TapsPage() {
                                   }
                                 }}
                               >
-                                <span>{tap.current_beer || '—'}</span>
+                                <div className="tap-cell-with-thumb">
+                                  {tap.label_image_url ? (
+                                    <img
+                                      src={tap.label_image_url}
+                                      alt=""
+                                      className="tap-row-label-thumb"
+                                    />
+                                  ) : null}
+                                  <span>{tap.current_beer || '—'}</span>
+                                </div>
                               </td>
                             </>
                           ) : (
@@ -933,6 +961,13 @@ function TapsPage() {
                                 className="cell-content"
                                 onClick={() => handleCellTap(tap, 'current', tap.current_beer)}
                               >
+                                {tap.label_image_url ? (
+                                  <img
+                                    src={tap.label_image_url}
+                                    alt=""
+                                    className="tap-row-label-thumb"
+                                  />
+                                ) : null}
                                 <span>{tap.current_beer || '—'}</span>
                               </div>
                             </div>
@@ -1309,6 +1344,52 @@ function TapsPage() {
                     )}
                   </dd>
                 </div>
+                <div className="tap-details-label-block">
+                  <dt>Обложка (Untappd)</dt>
+                  <dd>
+                    {detailsTap.label_image_url ? (
+                      <div className="tap-details-label-preview">
+                        <img
+                          src={detailsTap.label_image_url}
+                          alt=""
+                          className="tap-details-label-img"
+                        />
+                      </div>
+                    ) : (
+                      <span className="tap-details-label-empty">Нет изображения</span>
+                    )}
+                    {canEditTapsContent ? (
+                      <div className="tap-details-label-actions">
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={fetchUntappdLabelImage}
+                          disabled={
+                            isFetchingUntappdImage ||
+                            !(detailsTap.beer_name || '').trim()
+                          }
+                          title={
+                            !(detailsTap.beer_name || '').trim()
+                              ? 'Сначала укажите название пива на кране (поле «Название» в таблице)'
+                              : undefined
+                          }
+                        >
+                          {isFetchingUntappdImage ? 'Загрузка…' : 'Подтянуть с Untappd'}
+                        </button>
+                        {detailsTap.label_image_url ? (
+                          <button
+                            type="button"
+                            className="button button-secondary"
+                            onClick={clearTapLabelImage}
+                            disabled={isFetchingUntappdImage}
+                          >
+                            Сбросить
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </dd>
+                </div>
                 <div>
                   <dt>Описание</dt>
                   {isEditingDescription ? (
@@ -1434,6 +1515,11 @@ function TapsPage() {
                       const priceLine = presentationPriceLine(tap);
                       return (
                         <article key={tap.id} className="taps-presentation-row">
+                          {tap.label_image_url ? (
+                            <div className="taps-presentation-row__thumb" aria-hidden>
+                              <img src={tap.label_image_url} alt="" />
+                            </div>
+                          ) : null}
                           <div className="taps-presentation-row__body">
                             {brewery ? (
                               <div className="taps-presentation-row__brewery">{brewery}</div>

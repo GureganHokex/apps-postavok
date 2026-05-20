@@ -1,5 +1,5 @@
 """
-Скелет стадий V2 pipeline.
+Стадии V2 pipeline.
 """
 
 from pathlib import Path
@@ -8,7 +8,22 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 from django.conf import settings
 
-from parser_app.parsers import ExcelParser
+from parser_app.infrastructure.config.column_config_loader import get_field_patterns
+from parser_app.services.column_content_scoring import build_column_samples
+from parser_app.services.column_scoring import (
+    build_mapping_from_keywords,
+    score_header_for_field,
+    score_header_row,
+)
+from parser_app.pipeline_v2.row_extractor import V2RowExtractor
+
+CONTENT_SAMPLE_ROWS = 50
+
+
+def _field_patterns() -> Dict[str, List[str]]:
+    patterns = get_field_patterns() or {}
+    patterns.setdefault("sku", ["артикул", "sku", "код"])
+    return patterns
 
 
 class LoaderStage:
@@ -35,31 +50,8 @@ class LoaderStage:
 
 
 class HeaderDetectorStage:
-    HEADER_ALIASES = {
-        "beer_name": ["название", "наименование", "beer", "name", "позиция", "товар"],
-        "brewery": ["пивовар", "brewery", "бренд", "производитель"],
-        "style": ["стиль", "style", "тип", "сорт"],
-        "abv": ["abv", "крепост", "alc", "алк", "%"],
-        "price": ["цена", "price", "стоим", "руб"],
-        "volume": ["объем", "объём", "volume", "литр", "ml", "л"],
-        "stock": ["остат", "stock", "налич", "кол-во", "количество"],
-        "description": ["описан", "description", "коммент", "примечан"],
-        "sku": ["артикул", "sku", "код"],
-    }
-
     def _score_header_row(self, row_values: List[str]) -> float:
-        score = 0.0
-        for value in row_values:
-            cell = str(value or "").strip().lower()
-            if not cell:
-                continue
-            if any(token in cell for aliases in self.HEADER_ALIASES.values() for token in aliases):
-                score += 2.0
-            if len(cell) <= 40:
-                score += 0.5
-            if any(ch.isdigit() for ch in cell):
-                score -= 0.8
-        return score
+        return score_header_row(row_values, _field_patterns())
 
     def run(self, workbook: Dict[str, Any]) -> Dict[str, Any]:
         headers: Dict[str, int] = {}
@@ -91,53 +83,41 @@ class HeaderDetectorStage:
 
 
 class ColumnMapperStage:
-    FIELD_PATTERNS = {
-        "beer_name": ["название", "наименование", "beer", "name", "позиция", "товар"],
-        "brewery": ["пивовар", "brewery", "бренд", "производитель"],
-        "style": ["стиль", "style", "тип", "сорт"],
-        "abv": ["abv", "крепост", "alc", "алк", "%"],
-        "price": ["цена", "price", "стоим", "руб"],
-        "volume": ["объем", "объём", "volume", "литр", "ml", "л"],
-        "stock": ["остат", "stock", "налич", "кол-во", "количество"],
-        "description": ["описан", "description", "коммент", "примечан"],
-        "sku": ["артикул", "sku", "код"],
-    }
+    def __init__(self, field_patterns: Dict[str, List[str]] | None = None):
+        self.field_patterns = field_patterns or _field_patterns()
+        self.keyword_weights = None
 
     def _score_header_for_field(self, header: str, field_name: str) -> float:
-        h = (header or "").strip().lower()
-        if not h:
-            return 0.0
+        keywords = self.field_patterns.get(field_name, [])
+        return score_header_for_field(header, field_name, keywords)
 
-        score = 0.0
-        for token in self.FIELD_PATTERNS[field_name]:
-            if token in h:
-                score += 5.0
-        # Антишум: description не должен вытеснять beer_name.
-        if field_name == "beer_name" and any(x in h for x in ("описан", "description", "стиль", "style", "коммент")):
-            score -= 6.0
-        if field_name == "description" and any(x in h for x in ("описан", "description", "коммент", "примечан")):
-            score += 2.0
-        return score
+    def _map_for_sheet(
+        self,
+        headers: List[str],
+        column_samples: Dict[int, List[str]] | None = None,
+    ) -> Tuple[Dict[str, int], Dict[str, List[Dict[str, Any]]]]:
+        keyword_weights = getattr(self, "keyword_weights", None)
+        mapping = build_mapping_from_keywords(
+            headers,
+            self.field_patterns,
+            keyword_weights=keyword_weights,
+            column_samples=column_samples,
+        )
 
-    def _map_for_sheet(self, headers: List[str]) -> Tuple[Dict[str, int], Dict[str, List[Dict[str, Any]]]]:
-        mapping: Dict[str, int] = {}
         candidates: Dict[str, List[Dict[str, Any]]] = {}
-        used_cols = set()
-
-        for field in self.FIELD_PATTERNS:
+        for field in self.field_patterns:
             scored: List[Tuple[float, int, str]] = []
             for idx, header in enumerate(headers):
-                scored.append((self._score_header_for_field(header, field), idx, header))
+                s = self._score_header_for_field(header, field)
+                if field in (keyword_weights or {}):
+                    s *= float(keyword_weights[field])
+                scored.append((s, idx, header))
             scored.sort(key=lambda x: x[0], reverse=True)
-            top = [{"column_index": i, "header": h, "score": round(float(s), 3)} for s, i, h in scored[:3] if s > 0]
-            candidates[field] = top
-
-            for s, i, _h in scored:
-                if s <= 0 or i in used_cols:
-                    continue
-                mapping[field] = i
-                used_cols.add(i)
-                break
+            candidates[field] = [
+                {"column_index": i, "header": h, "score": round(float(s), 3)}
+                for s, i, h in scored[:3]
+                if s > 0
+            ]
 
         return mapping, candidates
 
@@ -147,14 +127,23 @@ class ColumnMapperStage:
         sheet_mappings: Dict[str, Dict[str, int]] = {}
         sheet_candidates: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         confidence_by_sheet: Dict[str, float] = {}
+        content_used: Dict[str, bool] = {}
 
         for sheet in workbook.get("sheet_names", []):
             header_row = int(header_rows.get(sheet, 0))
-            df = pd.read_excel(excel_file, sheet_name=sheet, header=None, nrows=header_row + 1)
+            nrows = header_row + 1 + CONTENT_SAMPLE_ROWS
+            df = pd.read_excel(excel_file, sheet_name=sheet, header=None, nrows=nrows)
             if df.empty or header_row >= len(df):
                 continue
+
             raw_headers = [str(v).strip() for v in df.iloc[header_row].fillna("").tolist()]
-            mapping, candidates = self._map_for_sheet(raw_headers)
+            column_samples = None
+            if header_row + 1 < len(df):
+                body = df.iloc[header_row + 1 :].reset_index(drop=True)
+                column_samples = build_column_samples(body, start_row=0, max_rows=CONTENT_SAMPLE_ROWS)
+                content_used[sheet] = bool(column_samples)
+
+            mapping, candidates = self._map_for_sheet(raw_headers, column_samples=column_samples)
             sheet_mappings[sheet] = mapping
             sheet_candidates[sheet] = candidates
 
@@ -165,16 +154,17 @@ class ColumnMapperStage:
                 top_scores.append(opts[0]["score"])
             confidence_by_sheet[sheet] = round(sum(top_scores) / len(top_scores), 3) if top_scores else 0.0
 
-        workbook["column_mapping_status"] = "scored"
+        workbook["column_mapping_status"] = "scored_with_content"
         workbook["column_mappings"] = sheet_mappings
         workbook["column_mapping_candidates"] = sheet_candidates
         workbook["column_mapping_confidence"] = confidence_by_sheet
+        workbook["column_content_scoring_used"] = content_used
         return workbook
 
 
 class RowExtractorStage:
-    def run(self, workbook: Dict[str, Any], parse_kwargs: Dict[str, Any]) -> List[Dict[str, Any]]:
-        # Bridge: реальное извлечение пока делегируем legacy-парсеру.
-        parser = ExcelParser(workbook["file_path"])
-        return parser.parse(**parse_kwargs)
+    def __init__(self):
+        self._extractor = V2RowExtractor()
 
+    def run(self, workbook: Dict[str, Any], parse_kwargs: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return self._extractor.extract(workbook, parse_kwargs)

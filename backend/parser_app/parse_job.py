@@ -4,9 +4,8 @@ import traceback
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.shortcuts import get_object_or_404
-
-from .models import File, ParsedItem, FileMetadata, Supplier, SupplierColumnMapping
+from .models import File, ParsedItem, FileMetadata, Supplier
+from .services.column_mapping_registry import load_effective_column_mapping
 from .validators import ParsedItemValidator
 from .filters import ContactFilter
 from .normalizers import DataNormalizer
@@ -57,22 +56,28 @@ def _run_file_parse_job_impl(file_id: int, user_id: int, request_data: dict) -> 
     brewery_name_from_request = request_data.get('brewery_name')
     supplier_id_from_request = request_data.get('supplier_id')
     supplier_column_mapping = None
+    supplier_keyword_weights = None
+    filename = file_obj.original_filename or ""
+    manual_mapping = None
     if supplier_id_from_request:
         try:
-            supplier = get_object_or_404(Supplier, pk=supplier_id_from_request)
-            supplier_column_mapping = supplier.column_mapping or {}
-            logger.info(f"Используется маппинг поставщика: {supplier.name}")
+            supplier = Supplier.objects.get(pk=supplier_id_from_request)
+            manual_mapping = supplier.column_mapping or {}
+            logger.info("Используется маппинг поставщика: %s", supplier.name)
+        except Supplier.DoesNotExist:
+            logger.warning("Поставщик %s не найден", supplier_id_from_request)
         except Exception as e:
-            logger.warning(f"Не удалось загрузить поставщика {supplier_id_from_request}: {e}")
-    if supplier_column_mapping is None:
-        # Fallback на новый feedback-loop реестр: берем global mappings.
-        global_rows = SupplierColumnMapping.objects.filter(
-            scope=SupplierColumnMapping.SCOPE_GLOBAL
-        ).values('target_field', 'source_column')
-        if global_rows:
-            supplier_column_mapping = {}
-            for row in global_rows:
-                supplier_column_mapping.setdefault(row['target_field'], []).append(row['source_column'])
+            logger.warning("Не удалось загрузить поставщика %s: %s", supplier_id_from_request, e)
+
+    merged_mapping, supplier_keyword_weights = load_effective_column_mapping(
+        supplier_id=supplier_id_from_request,
+        filename=filename,
+        manual_mapping=manual_mapping,
+    )
+    if merged_mapping:
+        supplier_column_mapping = merged_mapping
+    else:
+        supplier_keyword_weights = None
 
     try:
         logger.info(
@@ -89,6 +94,8 @@ def _run_file_parse_job_impl(file_id: int, user_id: int, request_data: dict) -> 
             parse_kwargs['brewery_name'] = brewery_name_from_request
         if supplier_column_mapping is not None:
             parse_kwargs['supplier_column_mapping'] = supplier_column_mapping
+        if supplier_keyword_weights:
+            parse_kwargs['supplier_keyword_weights'] = supplier_keyword_weights
         # Оркестровый rollout-контур: можно принудительно запустить shadow/v2
         # для конкретного запроса без рестарта сервера.
         if 'shadow_mode' in request_data:

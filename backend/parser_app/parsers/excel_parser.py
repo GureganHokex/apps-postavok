@@ -14,6 +14,56 @@ from .supplier_profiles import (
 
 logger = logging.getLogger(__name__)
 
+_PACKAGING_LABEL_RE = re.compile(
+    r"(банка|бутылк|кег|can|keg|шт/кор|не\s*дробим|тара)",
+    re.IGNORECASE,
+)
+
+
+def _split_combined_name_cell(value_str: str) -> tuple:
+    """Прайсы вроде Paradox: «НАЗВАНИЕ\\nописание» в одной ячейке."""
+    text = str(value_str or "").strip()
+    if not text or "\n" not in text:
+        return text, ""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return "", ""
+    if len(lines) == 1:
+        return lines[0], ""
+    return lines[0], " ".join(lines[1:])
+
+
+def _is_packaging_label(text: str) -> bool:
+    t = str(text or "").strip()
+    if not t:
+        return False
+    if not _PACKAGING_LABEL_RE.search(t):
+        return False
+    return len(t) < 160 or bool(re.search(r"\d", t))
+
+
+def _extract_volume_from_packaging_text(text: str) -> Optional[float]:
+    """Объём из «БАНКА 0,45 (12 шт/кор)» — не путать 12 шт с литрами."""
+    t = str(text or "")
+    if not t:
+        return None
+    dec = re.search(r"(\d+[.,]\d+)\s*(?:л|l)?", t, re.IGNORECASE)
+    if dec:
+        val = float(dec.group(1).replace(",", "."))
+        if val < 10:
+            return val
+    keg_l = re.search(r"(\d+)\s*л\b", t, re.IGNORECASE)
+    if keg_l:
+        return float(keg_l.group(1))
+    for match in re.finditer(r"(\d+[.,]?\d*)", t):
+        ctx = t[max(0, match.start() - 6) : match.end() + 12].lower()
+        if "шт" in ctx or "кор" in ctx:
+            continue
+        val = float(match.group(1).replace(",", "."))
+        if val < 1:
+            return val
+    return None
+
 
 class ExcelParser(BaseParser):
     """
@@ -23,7 +73,7 @@ class ExcelParser(BaseParser):
     Обрабатывает несколько листов в файле.
     """
     
-    def parse(self, supplier_type=None, brewery_name=None, supplier_column_mapping=None) -> List[Dict]:
+    def parse(self, supplier_type=None, brewery_name=None, supplier_column_mapping=None, supplier_keyword_weights=None, **kwargs) -> List[Dict]:
         """
         Парсинг Excel файла.
         
@@ -31,12 +81,14 @@ class ExcelParser(BaseParser):
             supplier_type: 'distributor' или 'brewery' (если передан, используется вместо автоопределения)
             brewery_name: Название пивоварни (для типа 'brewery')
             supplier_column_mapping: опциональный маппинг от настроек поставщика (поле -> список ключевых слов)
+            supplier_keyword_weights: веса полей для приоритета выученных/ручных ключевых слов
         
         Returns:
             Список словарей с данными о позициях
         """
         items = []
         self._supplier_column_mapping = supplier_column_mapping
+        self._supplier_keyword_weights = supplier_keyword_weights
         original_file_path = self.file_path
         
         # Проверяем, нужен ли временный файл (пробуем прочитать один лист)
@@ -390,45 +442,29 @@ class ExcelParser(BaseParser):
         
         return []
     
-    def _build_col_mapping_from_supplier(self, headers: List[str], supplier_column_mapping: Dict) -> Dict[str, int]:
+    def _build_col_mapping_from_supplier(
+        self,
+        headers: List[str],
+        supplier_column_mapping: Dict,
+        column_samples: Optional[Dict[int, List[str]]] = None,
+    ) -> Dict[str, int]:
         """
-        Строит маппинг колонок из настроек поставщика (ключевые слова -> поле).
-        supplier_column_mapping: {"beer_name": ["Имя", "Название товара"], "price": ["Цена за штуку"], ...}
-        Приоритет: точное совпадение фразы, затем более длинное совпадение (чтобы "Название товара" брало колонку "Название товара", а не "Название").
+        Строит маппинг колонок из реестра ключевых слов (поставщик + БД + column_patterns).
         """
+        from parser_app.services.column_scoring import build_mapping_from_keywords
+
         if not supplier_column_mapping or not headers:
             return {}
-        mapping = {}
-        headers_lower = [str(h).strip().lower() if h is not None else '' for h in headers]
-        for field, keywords in supplier_column_mapping.items():
-            if field in mapping:
-                continue
-            if not isinstance(keywords, list):
-                keywords = [keywords] if keywords else []
-            best_idx = None
-            best_score = -1
-            for idx, header in enumerate(headers_lower):
-                if not header:
-                    continue
-                for kw in keywords:
-                    kw_str = str(kw).strip().lower()
-                    if not kw_str:
-                        continue
-                    if kw_str == header:
-                        score = 3
-                    elif kw_str in header:
-                        score = 2
-                    elif header in kw_str:
-                        score = 1
-                    else:
-                        continue
-                    prev_len = len(headers_lower[best_idx]) if best_idx is not None else 0
-                    if score > best_score or (score == best_score and len(header) > prev_len):
-                        best_score = score
-                        best_idx = idx
-            if best_idx is not None:
-                mapping[field] = best_idx
-                logger.debug(f"Маппинг поставщика: колонка '{headers[best_idx] if best_idx < len(headers) else best_idx}' -> {field}")
+        weights = getattr(self, "_supplier_keyword_weights", None)
+        mapping = build_mapping_from_keywords(
+            headers,
+            supplier_column_mapping,
+            keyword_weights=weights,
+            column_samples=column_samples,
+        )
+        for field, idx in mapping.items():
+            header_label = headers[idx] if idx < len(headers) else idx
+            logger.debug("Маппинг поставщика: колонка '%s' -> %s", header_label, field)
         return mapping
 
     def _parse_dataframe(self, df: pd.DataFrame, sheet_name: str, 
@@ -499,7 +535,11 @@ class ExcelParser(BaseParser):
             # Приоритет: маппинг из настроек поставщика (пользовательский)
             if supplier_column_mapping:
                 headers = df.columns.tolist() if hasattr(df, 'columns') else []
-                user_mapping = self._build_col_mapping_from_supplier(headers, supplier_column_mapping)
+                from parser_app.services.column_content_scoring import build_column_samples
+                col_samples = build_column_samples(df.head(50)) if not df.empty else None
+                user_mapping = self._build_col_mapping_from_supplier(
+                    headers, supplier_column_mapping, column_samples=col_samples
+                )
                 if user_mapping:
                     col_mapping.update(user_mapping)
                     logger.info(f"Применён маппинг поставщика для листа {sheet_name}: {list(user_mapping.keys())}")
@@ -850,6 +890,7 @@ class ExcelParser(BaseParser):
         # Парсим строки данных
         # Сохраняем последнюю заполненную пивоварню для заполнения пустых значений
         last_brewery = None
+        last_product: Dict = {}
         
         # Определяем, является ли лист розливным (кеги)
         is_draft_sheet = ('розлив' in sheet_name.lower() or 
@@ -904,6 +945,7 @@ class ExcelParser(BaseParser):
                     # Извлекаем базовые данные один раз
                     base_item = self._extract_row_data(row, col_mapping, df, skip_price=True)
                     if base_item:
+                        self._apply_product_continuation(base_item, last_product)
                         # Пропускаем строки с "ЕГАИС" вместо реальных данных
                         beer_name_base = base_item.get('beer_name', '').strip().lower() if base_item.get('beer_name') else ''
                         brewery_base = base_item.get('brewery', '').strip().lower() if base_item.get('brewery') else ''
@@ -987,6 +1029,7 @@ class ExcelParser(BaseParser):
                                             items.append(processed_item)
                                             if processed_item.get('brewery'):
                                                 last_brewery = processed_item['brewery']
+                                            self._remember_product_context(processed_item, last_product)
                                         else:
                                             logger.debug(f"Элемент пропущен после обработки (строка {idx}, ценовая колонка {price_col_idx})")
                             except Exception as e:
@@ -1004,12 +1047,14 @@ class ExcelParser(BaseParser):
                                 items.append(processed_item)
                                 if processed_item.get('brewery'):
                                     last_brewery = processed_item['brewery']
+                                self._remember_product_context(processed_item, last_product)
                 else:
                     # Стандартная обработка (одна ценовая колонка)
                     item = self._extract_row_data(row, col_mapping, df)
                     if item:
                         # Сохраняем индекс строки для корректного экспорта заказа
                         item['_row_index'] = idx
+                        self._apply_product_continuation(item, last_product)
                         # КРИТИЧЕСКИ ВАЖНО: Проверяем валидность элемента ПЕРЕД обработкой
                         # Используем ИСХОДНОЕ значение brewery из строки DataFrame (до нормализации)
                         brewery_val_original = brewery_val_original_raw if brewery_val_original_raw else (item.get('brewery_original', '').strip() if item.get('brewery_original') else '')
@@ -1167,11 +1212,41 @@ class ExcelParser(BaseParser):
                             items.append(processed_item)
                             if processed_item.get('brewery'):
                                 last_brewery = processed_item['brewery']
+                            self._remember_product_context(processed_item, last_product)
             except Exception as e:
                 logger.error(f"Ошибка при обработке строки {idx} в листе {sheet_name}: {str(e)}", exc_info=True)
                 continue
         
         return items
+
+    def _apply_product_continuation(self, item: Dict, last_product: Optional[Dict]) -> None:
+        """Строка только с тарой/ценой (кег после банки того же пива)."""
+        if not last_product:
+            return
+        beer = str(item.get("beer_name") or "").strip()
+        if beer and not _is_packaging_label(beer):
+            return
+        if _is_packaging_label(beer):
+            item["beer_name"] = ""
+        if not str(item.get("beer_name") or "").strip():
+            for key in ("beer_name", "style", "abv", "ibu", "description"):
+                if not str(item.get(key) or "").strip() and last_product.get(key):
+                    item[key] = last_product[key]
+
+    def _remember_product_context(self, item: Dict, last_product: Dict) -> None:
+        name = str(item.get("beer_name") or "").strip()
+        if not name or _is_packaging_label(name):
+            return
+        last_product.clear()
+        last_product.update(
+            {
+                "beer_name": name,
+                "style": item.get("style"),
+                "abv": item.get("abv"),
+                "ibu": item.get("ibu"),
+                "description": item.get("description"),
+            }
+        )
     
     def _process_extracted_item(self, item: Dict, brewery_val_original: str, 
                                 supplier_type_enum: SupplierType, default_brewery: Optional[str],
@@ -2473,22 +2548,9 @@ class ExcelParser(BaseParser):
                                     
                                     # Извлекаем объем из формата (например "0.45" или "0.5")
                                     # Ищем все числа в строке и берем последнее (обычно это объем)
-                                    all_numbers = re.findall(r'(\d+[.,]?\d*)', format_part)
-                                    if all_numbers:
-                                        # Берем последнее число (оно обычно объем после формата)
-                                        vol_val = all_numbers[-1].replace(',', '.')
-                                        try:
-                                            vol_float = float(vol_val)
-                                            # Если объем меньше 1, предполагаем литры, иначе мл
-                                            if vol_float < 1:
-                                                item['volume'] = vol_float  # Сохраняем как число, не строку
-                                            elif vol_float < 100:
-                                                # Если число от 1 до 100, вероятно это литры (например, 5 л)
-                                                item['volume'] = vol_float  # Сохраняем как число
-                                            else:
-                                                item['volume'] = vol_float / 1000  # мл в литры, сохраняем как число
-                                        except Exception as e:
-                                            pass
+                                    vol_float = _extract_volume_from_packaging_text(format_part)
+                                    if vol_float is not None:
+                                        item['volume'] = vol_float
                                 
                                 if len(parts) >= 2:
                                     # Вторая часть может содержать количество в упаковке
@@ -2521,21 +2583,10 @@ class ExcelParser(BaseParser):
                                         except Exception:
                                             pass
                                 
-                                # Если не нашли объем по паттернам, ищем любое число
                                 if not volume_found:
-                                    all_numbers = re.findall(r'(\d+[.,]?\d*)', value_str)
-                                    if all_numbers:
-                                        vol_val = all_numbers[-1].replace(',', '.')
-                                        try:
-                                            vol_float = float(vol_val)
-                                            if vol_float < 1:
-                                                item['volume'] = vol_float
-                                            elif vol_float < 100:
-                                                item['volume'] = vol_float
-                                            else:
-                                                item['volume'] = vol_float / 1000
-                                        except Exception:
-                                            pass
+                                    vol_float = _extract_volume_from_packaging_text(value_str)
+                                    if vol_float is not None:
+                                        item['volume'] = vol_float
                                 
                                 # Сохраняем формат (нормализуем)
                                 format_lower = value_str.lower()
@@ -2606,6 +2657,10 @@ class ExcelParser(BaseParser):
                             # Если это валидное значение stock, сохраняем его
                             item[field] = value_str
                         elif field == 'beer_name':
+                            name_part, desc_part = _split_combined_name_cell(value_str)
+                            if desc_part and not item.get('description'):
+                                item['description'] = desc_part
+                            value_str = name_part or value_str
                             # Извлекаем brewery из начала названия пива, если его нет отдельно
                             if 'brewery' not in col_mapping or not item.get('brewery'):
                                 brewery_from_name = self._extract_brewery_from_name(value_str)
@@ -2853,6 +2908,8 @@ class ExcelParser(BaseParser):
             filled_fields.append('price')
         if style_val and not is_empty_value(style_val):
             filled_fields.append('style')
+        if format_type_val_check and not is_empty_value(format_type_val_check):
+            filled_fields.append('format_type')
         
         # Если нет заполненных полей - пропускаем
         if not filled_fields:
@@ -2879,9 +2936,15 @@ class ExcelParser(BaseParser):
         # Если нет beer_name, но есть brewery и price - это валидная запись
         # Если есть beer_name и хотя бы одно из (price, brewery, style) - это валидная запись
         has_valid_combination = (
-            (beer_name_val and not is_empty_value(beer_name_val) and 
-             (price_val or brewery_val or style_val)) or
-            (brewery_val and not is_empty_value(brewery_val) and price_val)
+            (beer_name_val and not is_empty_value(beer_name_val) and
+             (price_val or brewery_val or style_val))
+            or (brewery_val and not is_empty_value(brewery_val) and price_val)
+            or (
+                price_val
+                and not is_empty_value(price_val)
+                and format_type_val_check
+                and not is_empty_value(format_type_val_check)
+            )
         )
         
         if not has_valid_combination:

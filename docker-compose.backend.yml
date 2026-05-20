@@ -23,9 +23,12 @@ services:
     env_file:
       - backend/env.example
     environment:
-      DJANGO_DEBUG: "false"
+      DJANGO_DEBUG: "true"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+      EXCEL_PARSER_PIPELINE_V2: "true"
+      PARSER_LEGACY_FORCE: "false"
+      PARSER_SHADOW_MODE: "true"
       DB_ENGINE: "postgresql"
       DB_NAME: "apps_postavok"
       DB_USER: "apps_postavok"

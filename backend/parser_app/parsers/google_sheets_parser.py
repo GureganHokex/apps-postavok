@@ -26,7 +26,7 @@ class GoogleSheetsParser(BaseParser):
         super().__init__(file_path)
         self.sheet_url = sheet_url
     
-    def parse(self, supplier_type=None, brewery_name=None, supplier_column_mapping=None, **kwargs) -> List[Dict]:
+    def parse(self, supplier_type=None, brewery_name=None, supplier_column_mapping=None, supplier_keyword_weights=None, **kwargs) -> List[Dict]:
         """
         Парсинг Google Sheets.
         
@@ -35,6 +35,7 @@ class GoogleSheetsParser(BaseParser):
         """
         items = []
         self._supplier_column_mapping = supplier_column_mapping
+        self._supplier_keyword_weights = supplier_keyword_weights
         
         if not self.sheet_url:
             return items
@@ -110,6 +111,7 @@ class GoogleSheetsParser(BaseParser):
         temp_parser = ExcelParser(self.file_path)
         col_mapping = temp_parser._map_columns(df.columns.tolist())
         if supplier_column_mapping:
+            temp_parser._supplier_keyword_weights = getattr(self, "_supplier_keyword_weights", None)
             user_mapping = temp_parser._build_col_mapping_from_supplier(df.columns.tolist(), supplier_column_mapping)
             if user_mapping:
                 col_mapping = {**col_mapping, **user_mapping}

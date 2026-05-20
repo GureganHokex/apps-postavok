@@ -176,10 +176,26 @@ class AvailableBeerSerializer(serializers.ModelSerializer):
                  'sort_order',
                  'display_name', 'created_at']
         read_only_fields = ['created_at']
+        extra_kwargs = {
+            'brewery': {'required': False, 'allow_blank': True},
+        }
+
+    def validate(self, attrs):
+        brewery = (attrs.get('brewery') or '').strip()
+        beer_name = (attrs.get('beer_name') or '').strip()
+        if not beer_name:
+            raise serializers.ValidationError({'beer_name': 'Укажите название позиции.'})
+        attrs['brewery'] = brewery
+        attrs['beer_name'] = beer_name
+        return attrs
     
     def get_display_name(self, obj):
         """Возвращает строку 'Пивоварня | Название(Цена)'."""
-        result = f"{obj.brewery} | {obj.beer_name}"
+        brewery = (obj.brewery or '').strip()
+        if brewery:
+            result = f"{brewery} | {obj.beer_name}"
+        else:
+            result = obj.beer_name
         vp = (obj.volume_price_text or '').strip()
         if vp:
             return result

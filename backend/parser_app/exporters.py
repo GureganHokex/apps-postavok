@@ -2,6 +2,7 @@
 Экспорт заказов в PDF и Excel.
 """
 
+import logging
 import os
 from pathlib import Path
 from datetime import datetime
@@ -19,6 +20,8 @@ from .models import Order, ParsedItem, TapLocation, Tap
 import pandas as pd
 import copy
 
+logger = logging.getLogger(__name__)
+
 
 class OrderExporter:
     """
@@ -35,6 +38,35 @@ class OrderExporter:
             order: Объект заказа для экспорта
         """
         self.order = order
+
+    @staticmethod
+    def _order_item_id(order_item: dict):
+        """ID позиции в заказе (поддержка item_id и id)."""
+        if not order_item:
+            return None
+        raw = order_item.get('item_id', order_item.get('id'))
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _first_order_item_id(self) -> Optional[int]:
+        for order_item in self.order.items or []:
+            item_id = self._order_item_id(order_item)
+            if item_id is not None:
+                return item_id
+        return None
+
+    @staticmethod
+    def _safe_float(value):
+        if value is None or value == '':
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _safe_row_num(location) -> Optional[int]:
@@ -110,25 +142,48 @@ class OrderExporter:
         Returns:
             Путь к созданному Excel файлу
         """
-        # Получаем исходный файл из первого элемента заказа
         order_items = self._get_order_items()
         if not order_items:
-            raise ValueError("Заказ не содержит позиций")
-        
-        # Получаем файл из первой позиции
-        first_item_id = self.order.items[0].get('item_id')
-        parsed_item = ParsedItem.objects.get(id=first_item_id)
+            raise ValueError(
+                "Заказ не содержит позиций: записи в прайсе удалены или недоступны."
+            )
+
+        first_item_id = self._first_order_item_id()
+        if not first_item_id:
+            raise ValueError("В заказе нет корректных позиций (нужен item_id).")
+
+        try:
+            parsed_item = ParsedItem.objects.select_related('file').get(id=first_item_id)
+        except ParsedItem.DoesNotExist:
+            return self._export_pdf_to_excel(None, order_items)
+
         source_file = parsed_item.file
-        
-        # Путь к исходному файлу
         source_file_path = Path(settings.MEDIA_ROOT) / source_file.file_path
-        
-        if not source_file_path.exists():
-            raise FileNotFoundError(f"Исходный файл не найден: {source_file_path}")
-        
-        # Проверяем тип файла - для PDF создаем новый Excel
-        if source_file.file_type == 'pdf':
+
+        if source_file.file_type == 'pdf' or not source_file_path.exists():
+            if not source_file_path.exists():
+                logger.warning(
+                    "Исходный прайс не найден на диске (%s), экспорт заказа #%s в отдельный Excel",
+                    source_file_path,
+                    self.order.id,
+                )
             return self._export_pdf_to_excel(source_file, order_items)
+
+        try:
+            return self._export_to_excel_from_template(
+                source_file, source_file_path, order_items,
+            )
+        except Exception:
+            logger.exception(
+                "Ошибка экспорта заказа #%s по шаблону прайса, fallback в отдельный Excel",
+                self.order.id,
+            )
+            return self._export_pdf_to_excel(source_file, order_items)
+
+    def _export_to_excel_from_template(
+        self, source_file, source_file_path: Path, order_items: list,
+    ) -> str:
+        """Заполняет колонку «Заказ» в копии исходного Excel-прайса."""
         
         # Загружаем исходный файл Excel
         # Используем data_only=False чтобы работать с формулами и иметь возможность их удалять
@@ -149,8 +204,10 @@ class OrderExporter:
         # Поэтому сначала создаем словарь с row_num, а excel_row будем вычислять позже
         order_items_dict = {}
         for order_item in self.order.items:
-            item_id = order_item.get('item_id')
+            item_id = self._order_item_id(order_item)
             quantity = order_item.get('quantity')
+            if item_id is None:
+                continue
             try:
                 parsed_item = ParsedItem.objects.get(id=item_id)
                 location = parsed_item.raw_source_location
@@ -309,9 +366,11 @@ class OrderExporter:
             
             # Восстанавливаем значения для этого листа
             for item in self.order.items:
-                item_id = item.get('item_id')
+                item_id = self._order_item_id(item)
                 quantity = item.get('quantity')
-                
+                if item_id is None:
+                    continue
+
                 try:
                     parsed_item = ParsedItem.objects.get(id=item_id)
                     location = parsed_item.raw_source_location
@@ -357,9 +416,11 @@ class OrderExporter:
             
             # Проверяем и исправляем значения для всех позиций
             for item in self.order.items:
-                item_id = item.get('item_id')
+                item_id = self._order_item_id(item)
                 quantity = item.get('quantity')
-                
+                if item_id is None:
+                    continue
+
                 try:
                     parsed_item = ParsedItem.objects.get(id=item_id)
                     location = parsed_item.raw_source_location
@@ -442,7 +503,7 @@ class OrderExporter:
     
     def _export_pdf_to_excel(self, source_file, order_items) -> str:
         """
-        Создает Excel файл с заказом из PDF.
+        Создаёт отдельный Excel с позициями заказа (PDF, нет прайса на диске или fallback).
         """
         wb = Workbook()
         ws = wb.active
@@ -463,12 +524,14 @@ class OrderExporter:
         total_qty = 0
         
         for order_item in self.order.items:
-            item_id = order_item.get('item_id')
+            item_id = self._order_item_id(order_item)
             quantity = order_item.get('quantity', 1)
-            
+            if item_id is None:
+                continue
+
             try:
                 parsed_item = ParsedItem.objects.get(id=item_id)
-                price = float(parsed_item.price) if parsed_item.price else 0
+                price = self._safe_float(parsed_item.price) or 0
                 item_sum = price * quantity
                 total_sum += item_sum
                 total_qty += quantity
@@ -488,7 +551,7 @@ class OrderExporter:
                 ws.cell(row=row_num, column=3, value=parsed_item.style or '')
                 ws.cell(row=row_num, column=4, value=price)
                 ws.cell(row=row_num, column=5, value=parsed_item.currency or 'RUB')
-                ws.cell(row=row_num, column=6, value=float(parsed_item.volume) if parsed_item.volume else '')
+                ws.cell(row=row_num, column=6, value=self._safe_float(parsed_item.volume) or '')
                 ws.cell(row=row_num, column=7, value=format_label)
                 ws.cell(row=row_num, column=8, value=quantity)
                 
@@ -499,10 +562,15 @@ class OrderExporter:
                 row_num += 1
             except ParsedItem.DoesNotExist:
                 continue
-        
+
+        if row_num <= 2:
+            raise ValueError(
+                "Не удалось собрать позиции заказа: записи в прайсе удалены или недоступны."
+            )
+
         # Пустая строка
         row_num += 1
-        
+
         # Итого
         ws.cell(row=row_num, column=7, value="Итого:")
         ws.cell(row=row_num, column=7).font = Font(bold=True)
@@ -523,19 +591,25 @@ class OrderExporter:
         export_dir = Path(settings.MEDIA_ROOT) / 'exports'
         export_dir.mkdir(parents=True, exist_ok=True)
         
-        source_filename = Path(source_file.original_filename).stem
+        if source_file and source_file.original_filename:
+            source_filename = Path(source_file.original_filename).stem
+        else:
+            source_filename = f"order_{self.order.id}"
         today = datetime.now()
         date_suffix = f"{today.day:02d}-{today.month:02d}"
         filename = f"{source_filename}-{date_suffix}.xlsx"
         file_path = export_dir / filename
-        
+
+        if file_path.exists():
+            file_path.unlink()
+
         wb.save(str(file_path))
-        
+
         self.order.export_file_path = str(file_path.relative_to(settings.MEDIA_ROOT))
         self.order.save()
-        
+
         return str(file_path)
-    
+
     def export_to_pdf(self) -> str:
         """
         Экспортирует заказ в PDF файл.
@@ -549,8 +623,8 @@ class OrderExporter:
         
         # Формируем имя файла: название_исходного_файла-день-месяц.pdf
         source_filename = f"order_{self.order.id}"
-        if self.order.items:
-            first_item_id = self.order.items[0].get('item_id')
+        first_item_id = self._first_order_item_id()
+        if first_item_id:
             try:
                 parsed_item = ParsedItem.objects.get(id=first_item_id)
                 source_filename = Path(parsed_item.file.original_filename).stem
@@ -639,9 +713,11 @@ class OrderExporter:
         order_items = []
         
         for order_item in self.order.items:
-            item_id = order_item.get('item_id')
+            item_id = self._order_item_id(order_item)
             quantity = order_item.get('quantity')
-            
+            if item_id is None:
+                continue
+
             try:
                 parsed_item = ParsedItem.objects.get(id=item_id)
                 # Нормализуем brewery (удаляем город) перед добавлением в заказ
@@ -651,10 +727,10 @@ class OrderExporter:
                     'brewery': brewery_normalized,
                     'beer_name': parsed_item.beer_name,
                     'style': parsed_item.style,
-                    'abv': float(parsed_item.abv) if parsed_item.abv else None,
-                    'price': float(parsed_item.price) if parsed_item.price else None,
+                    'abv': self._safe_float(parsed_item.abv),
+                    'price': self._safe_float(parsed_item.price),
                     'currency': parsed_item.currency,
-                    'volume': float(parsed_item.volume) if parsed_item.volume else None,
+                    'volume': self._safe_float(parsed_item.volume),
                     'format_type': parsed_item.format_type,
                     'quantity': quantity,
                 }

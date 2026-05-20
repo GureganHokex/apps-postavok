@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { getOrders, downloadOrder, getOrder, createOrder, getOrderStatistics } from '../api';
+import { getOrders, downloadOrder, getOrder, createOrder, getOrderStatistics, getApiErrorMessage } from '../api';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import './OrdersHistory.css';
@@ -49,7 +49,7 @@ function OrdersHistory() {
       await downloadOrder(orderId);
       toast.success('Заказ успешно скачан');
     } catch (err) {
-      toast.error(`Ошибка скачивания: ${err.message}`);
+      toast.error(`Ошибка скачивания: ${getApiErrorMessage(err)}`);
     }
   }, []);
 
@@ -58,7 +58,7 @@ function OrdersHistory() {
       const order = await getOrder(orderId);
       setSelectedOrder(order);
     } catch (err) {
-      toast.error(`Ошибка загрузки деталей: ${err.message}`);
+      toast.error(`Ошибка загрузки деталей: ${getApiErrorMessage(err)}`);
     }
   }, []);
 
@@ -88,7 +88,7 @@ function OrdersHistory() {
         downloadOrder(newOrder.id);
       }, 500);
     } catch (err) {
-      toast.error(`Ошибка дублирования заказа: ${err.message}`);
+      toast.error(`Ошибка дублирования заказа: ${getApiErrorMessage(err)}`);
     }
   }, [refetch]);
 

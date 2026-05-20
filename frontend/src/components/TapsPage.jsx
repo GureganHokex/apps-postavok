@@ -494,7 +494,16 @@ function TapsPage() {
       setNewBeerInput('');
       toast.success('Позиция добавлена');
     } catch (err) {
-      toast.error('Ошибка добавления');
+      const data = err.response?.data;
+      const detail =
+        (typeof data?.detail === 'string' && data.detail) ||
+        (Array.isArray(data?.beer_name) && data.beer_name[0]) ||
+        (Array.isArray(data?.brewery) && data.brewery[0]) ||
+        (data && typeof data === 'object' && Object.values(data).flat?.()[0]) ||
+        (err.response?.status === 403
+          ? 'Недостаточно прав. Нужна роль бармена или администратора.'
+          : null);
+      toast.error(detail || 'Ошибка добавления');
     }
   };
 
@@ -1132,13 +1141,16 @@ function TapsPage() {
                     ? 'Тапните по позиции, затем по слоту крана'
                     : 'Перетащите на кран — или тапните и выберите слот'}
               </p>
+              <p className="sidebar-hint sidebar-hint--format">
+                Формат: «Пивоварня | Название(цена)» или просто название
+              </p>
 
               <div className="add-beer-form">
                 <input
                   type="text"
                   value={newBeerInput}
                   onChange={(e) => setNewBeerInput(e.target.value)}
-                  placeholder="Пивоварня | Название(Цена)"
+                  placeholder="Пивоварня | Название(цена)"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleAddAvailableBeer();
                   }}

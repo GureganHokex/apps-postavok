@@ -423,16 +423,57 @@ export const createOrder = async (items, exportFormat = 'excel') => {
  * @param {number} orderId - ID заказа
  * @returns {Promise} Promise с blob файла
  */
+/** Распаковать JSON-ошибку, если axios получил blob вместо файла. */
+async function normalizeBlobErrorResponse(error) {
+  const data = error.response?.data;
+  if (!(data instanceof Blob) || !error.response) {
+    return error;
+  }
+  try {
+    const text = await data.text();
+    try {
+      error.response.data = JSON.parse(text);
+    } catch {
+      error.response.data = { error: text.slice(0, 500) };
+    }
+  } catch {
+    error.response.data = { error: 'Ошибка скачивания файла' };
+  }
+  return error;
+}
+
 export const downloadOrder = async (orderId) => {
-  const response = await api.get(`/orders/${orderId}/export/`, {
-    responseType: 'blob',
-  });
-  
-  // Получаем имя файла из заголовка Content-Disposition
+  let response;
+  try {
+    response = await api.get(`/orders/${orderId}/export/`, {
+      responseType: 'blob',
+    });
+  } catch (err) {
+    throw await normalizeBlobErrorResponse(err);
+  }
+
+  const blob = response.data;
+  const contentType = (response.headers['content-type'] || '').toLowerCase();
+  if (
+    blob.type?.includes('json')
+    || contentType.includes('application/json')
+  ) {
+    try {
+      const text = await blob.text();
+      const payload = JSON.parse(text);
+      const err = new Error(stringifyApiValue(payload.error || payload.detail) || 'Ошибка экспорта');
+      err.response = { status: response.status, data: payload };
+      throw err;
+    } catch (parseErr) {
+      if (parseErr.response) {
+        throw parseErr;
+      }
+    }
+  }
+
   let filename = `order_${orderId}.xlsx`;
   const contentDisposition = response.headers['content-disposition'];
   if (contentDisposition) {
-    // Ищем filename*=UTF-8'' или filename=
     const utf8Match = contentDisposition.match(/filename\*=UTF-8''(.+)/i);
     const simpleMatch = contentDisposition.match(/filename="?([^";\n]+)"?/i);
     if (utf8Match) {
@@ -441,9 +482,8 @@ export const downloadOrder = async (orderId) => {
       filename = simpleMatch[1];
     }
   }
-  
-  // Создаем ссылку для скачивания
-  const url = window.URL.createObjectURL(new Blob([response.data]));
+
+  const url = window.URL.createObjectURL(new Blob([blob]));
   const link = document.createElement('a');
   link.href = url;
   link.setAttribute('download', filename);

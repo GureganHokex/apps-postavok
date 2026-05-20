@@ -431,7 +431,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.action in ('list', 'retrieve'):
+        if self.action in ('list', 'retrieve', 'export'):
             return [IsAuthenticated(), IsAdminOrBartender()]
         return [IsAuthenticated(), IsAdmin()]
 
@@ -614,25 +614,39 @@ class OrderViewSet(viewsets.ModelViewSet):
         GET /api/orders/<id>/export/
         """
         order = self.get_object()
-        
-        # Всегда экспортируем заново для актуального имени файла
-        exporter = OrderExporter(order)
-        exporter.export()
-        
-        # Путь к файлу
+
+        try:
+            exporter = OrderExporter(order)
+            exporter.export()
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except FileNotFoundError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as exc:
+            logger.exception('Ошибка экспорта заказа #%s', order.id)
+            return Response(
+                {'error': f'Ошибка экспорта: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not order.export_file_path:
+            return Response(
+                {'error': 'Файл экспорта не был создан'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         file_path = Path(settings.MEDIA_ROOT) / order.export_file_path
-        
+
         if not file_path.exists():
             return Response(
-                {'error': 'Экспортированный файл не найден'},
-                status=status.HTTP_404_NOT_FOUND
+                {'error': 'Экспортированный файл не найден на сервере'},
+                status=status.HTTP_404_NOT_FOUND,
             )
-        
-        # Возвращаем файл для скачивания
+
         return FileResponse(
             open(file_path, 'rb'),
             as_attachment=True,
-            filename=file_path.name
+            filename=file_path.name,
         )
 
 
@@ -1073,7 +1087,8 @@ class AvailableBeerViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ('list', 'retrieve'):
             return [IsAuthenticated()]
-        return [IsAuthenticated(), IsAdmin()]
+        # Бармены редактируют краны — им нужен тот же доступ к «доступным позициям», что и в UI.
+        return [IsAuthenticated(), CanEditTapsContent()]
 
     @staticmethod
     def _looks_like_keg(format_type, volume):

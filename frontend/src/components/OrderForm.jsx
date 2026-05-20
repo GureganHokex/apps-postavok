@@ -7,7 +7,7 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { getFileItems, createOrder, downloadOrder, getLocations, bulkCreateAvailableBeers } from '../api';
+import { getFileItems, createOrder, downloadOrder, getLocations, bulkCreateAvailableBeers, getApiErrorMessage } from '../api';
 import { quantitySchema } from '../utils/validation';
 import DraggableOrderItem from './DraggableOrderItem';
 import OrderTemplates from './OrderTemplates';
@@ -214,7 +214,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
       await downloadOrder(orderId);
       toast.success('Заказ успешно скачан');
     } catch (err) {
-      const errorMsg = `Ошибка экспорта заказа: ${err.message}`;
+      const errorMsg = `Ошибка экспорта заказа: ${getApiErrorMessage(err)}`;
       toast.error(errorMsg);
       setError(errorMsg);
     }

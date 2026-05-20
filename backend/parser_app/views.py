@@ -649,6 +649,18 @@ class OrderViewSet(viewsets.ModelViewSet):
             filename=file_path.name,
         )
 
+    def destroy(self, request, *args, **kwargs):
+        """Удаление заказа и файла экспорта на диске (если есть)."""
+        order = self.get_object()
+        if order.export_file_path:
+            export_path = Path(settings.MEDIA_ROOT) / order.export_file_path
+            try:
+                if export_path.is_file():
+                    export_path.unlink()
+            except OSError:
+                logger.warning('Не удалось удалить файл экспорта: %s', export_path)
+        return super().destroy(request, *args, **kwargs)
+
 
 @api_view(['POST'])
 @authentication_classes([SessionAuthenticationNoCSRF])

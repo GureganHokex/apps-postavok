@@ -516,6 +516,21 @@ export const getOrder = async (orderId) => {
 };
 
 /**
+ * Удаляет заказ. Только админ.
+ */
+export const deleteOrder = async (orderId) => {
+  await api.delete(`/orders/${orderId}/`);
+};
+
+/**
+ * Метаданные загруженного прайса.
+ */
+export const getFile = async (fileId) => {
+  const response = await api.get(`/files/${fileId}/`);
+  return response.data;
+};
+
+/**
  * Получает расширенную статистику по заказам за период.
  * @param {Object} params - date_from, date_to (YYYY-MM-DD)
  * @returns {Promise} total_orders, total_sum, aggregated positions, price_trend

@@ -58,15 +58,37 @@ class OrderSerializer(serializers.ModelSerializer):
     
     items_count = serializers.SerializerMethodField()
     resolved_items = serializers.SerializerMethodField()
+    source_file_id = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
-        fields = ['id', 'created_at', 'items', 'resolved_items', 'export_format',
-                 'export_file_path', 'items_count']
+        fields = ['id', 'created_at', 'items', 'resolved_items', 'source_file_id',
+                 'export_format', 'export_file_path', 'items_count']
     
     def get_items_count(self, obj):
         """Возвращает количество позиций в заказе."""
         return len(obj.items or [])
+
+    def get_source_file_id(self, obj):
+        """ID прайса (File), из которого взят первый найденный item_id заказа."""
+        rows = obj.items or []
+        item_ids = []
+        for row in rows:
+            raw = row.get('item_id') or row.get('id')
+            if raw is not None:
+                try:
+                    item_ids.append(int(raw))
+                except (TypeError, ValueError):
+                    continue
+        if not item_ids:
+            return None
+        item = (
+            ParsedItem.objects.filter(id__in=item_ids)
+            .select_related('file')
+            .order_by('id')
+            .first()
+        )
+        return item.file_id if item else None
 
     def get_resolved_items(self, obj):
         """
@@ -88,6 +110,7 @@ class OrderSerializer(serializers.ModelSerializer):
             result.append({
                 'item_id': item_id,
                 'quantity': quantity,
+                'file_id': item.file_id if item else row.get('file_id'),
                 'brewery': row.get('brewery') or (item.brewery if item else ''),
                 'beer_name': row.get('beer_name') or (item.beer_name if item else ''),
                 'format_type': row.get('format_type') or (item.format_type if item else ''),

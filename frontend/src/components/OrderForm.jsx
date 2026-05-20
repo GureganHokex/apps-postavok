@@ -17,14 +17,20 @@ import './OrderForm.css';
 const KEG_PER_LITER_THRESHOLD = 2000;
 const NON_KEG_FORMAT_TOKENS = ['бан', 'can', 'бут', 'bottle', 'пэт', 'pet'];
 
-const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems, items }) {
+const OrderFormContent = memo(function OrderFormContent({
+  fileId,
+  selectedItems,
+  items,
+  initialQuantities = null,
+  initialExportFormat = 'excel',
+}) {
   const [orderItems, setOrderItems] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [showOnlyWithQty, setShowOnlyWithQty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [exportFormat, setExportFormat] = useState('excel');
+  const [exportFormat, setExportFormat] = useState(initialExportFormat || 'excel');
   const [createdOrder, setCreatedOrder] = useState(null);
   const [loadingItems, setLoadingItems] = useState(false);
   const [showTapsModal, setShowTapsModal] = useState(false);
@@ -33,6 +39,12 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   const [autoSendToTaps, setAutoSendToTaps] = useState(false);
   const [selectedKegIdsForTaps, setSelectedKegIdsForTaps] = useState([]);
   const [kegSelectionTouched, setKegSelectionTouched] = useState(false);
+
+  useEffect(() => {
+    if (initialExportFormat) {
+      setExportFormat(initialExportFormat);
+    }
+  }, [initialExportFormat]);
 
   // Определяем, похоже ли на кегу
   const isKeg = useCallback((item) => {
@@ -90,14 +102,15 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
         setQuantities(prevQuantities => {
           const newQuantities = { ...prevQuantities };
           itemsToShow.forEach(item => {
-            if (!(item.id in newQuantities)) {
-              // По умолчанию: кеги = 1, фасовка/банка/бутылка = 10
+            const fromDraft = initialQuantities?.[item.id] ?? initialQuantities?.[String(item.id)];
+            if (fromDraft != null && fromDraft !== '') {
+              newQuantities[item.id] = Number(fromDraft);
+            } else if (!(item.id in newQuantities)) {
               newQuantities[item.id] = isKeg(item) ? 1 : 10;
             }
           });
-          // Удаляем количества для элементов, которые больше не выбраны
           Object.keys(newQuantities).forEach(itemId => {
-            if (!itemsToShow.find(item => item.id === parseInt(itemId))) {
+            if (!itemsToShow.find(item => item.id === parseInt(itemId, 10))) {
               delete newQuantities[itemId];
             }
           });
@@ -113,7 +126,7 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
     };
 
     loadSelectedItems();
-  }, [selectedItems, fileId, isKeg, items]);
+  }, [selectedItems, fileId, isKeg, items, initialQuantities]);
 
   const [quantityErrors, setQuantityErrors] = useState({});
 
@@ -732,10 +745,22 @@ const OrderFormContent = memo(function OrderFormContent({ fileId, selectedItems,
   );
 });
 
-const OrderForm = memo(function OrderForm({ fileId, selectedItems, items }) {
+const OrderForm = memo(function OrderForm({
+  fileId,
+  selectedItems,
+  items,
+  initialQuantities,
+  initialExportFormat,
+}) {
   return (
     <DndProvider backend={HTML5Backend}>
-      <OrderFormContent fileId={fileId} selectedItems={selectedItems} items={items} />
+      <OrderFormContent
+        fileId={fileId}
+        selectedItems={selectedItems}
+        items={items}
+        initialQuantities={initialQuantities}
+        initialExportFormat={initialExportFormat}
+      />
     </DndProvider>
   );
 });

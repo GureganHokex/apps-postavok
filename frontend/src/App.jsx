@@ -22,7 +22,8 @@ import TapsPage from './components/TapsPage';
 import SupplierSettings from './components/SupplierSettings';
 import ErrorBoundary from './components/ErrorBoundary';
 import BottomTabBar from './components/shell/BottomTabBar';
-import { getApiErrorMessage } from './api';
+import { getApiErrorMessage, getOrder, getFile, getFileItems, getFileMetadata } from './api';
+import toast from 'react-hot-toast';
 import './App.css';
 
 function getPageType() {
@@ -220,6 +221,8 @@ function AppContent({ fullAccess = false, role = 'user' }) {
   const defaultTab = isAdmin ? 'upload' : 'taps';
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [selectedItems, setSelectedItems] = useState([]);
+  /** Черновик из истории: количества и формат для вкладки «Заказ». */
+  const [orderReformDraft, setOrderReformDraft] = useState(null);
 
   const allowedTabs = useMemo(() => {
     if (fullAccess || role === 'admin') {
@@ -265,6 +268,83 @@ function AppContent({ fullAccess = false, role = 'user' }) {
   const handleDeselectAll = useCallback(() => {
     setSelectedItems([]);
   }, []);
+
+  const normalizeItemsList = useCallback((raw) => {
+    if (Array.isArray(raw)) return raw;
+    if (raw && Array.isArray(raw.results)) return raw.results;
+    return [];
+  }, []);
+
+  const handleReformOrderFromHistory = useCallback(async (orderId) => {
+    try {
+      const order = await getOrder(orderId);
+      const rows =
+        (Array.isArray(order.resolved_items) && order.resolved_items.length > 0
+          ? order.resolved_items
+          : order.items) || [];
+
+      if (!rows.length) {
+        toast.error('Заказ не содержит позиций');
+        return;
+      }
+
+      const quantities = {};
+      const itemIds = [];
+      for (const row of rows) {
+        const id = Number(row.item_id ?? row.id);
+        if (!Number.isFinite(id)) continue;
+        itemIds.push(id);
+        const qty = parseInt(row.quantity, 10);
+        quantities[id] = Number.isFinite(qty) && qty > 0 ? qty : 1;
+      }
+
+      if (!itemIds.length) {
+        toast.error('Не удалось восстановить позиции заказа');
+        return;
+      }
+
+      const fileId = order.source_file_id ?? rows.find((r) => r.file_id)?.file_id;
+      if (!fileId) {
+        toast.error('Прайс для этого заказа не найден — позиции могли быть удалены');
+        return;
+      }
+
+      const [fileMeta, itemsRaw, metadataRaw] = await Promise.all([
+        getFile(fileId),
+        getFileItems(fileId, {}),
+        getFileMetadata(fileId).catch(() => null),
+      ]);
+
+      const loadedItems = normalizeItemsList(itemsRaw);
+      const loadedIds = new Set(loadedItems.map((it) => Number(it.id)));
+      const validIds = itemIds.filter((id) => loadedIds.has(id));
+      if (!validIds.length) {
+        toast.error('Позиции заказа не найдены в прайсе — возможно, прайс перепарсен');
+        return;
+      }
+      if (validIds.length < itemIds.length) {
+        toast('Часть позиций из заказа отсутствует в текущем прайсе');
+      }
+
+      setCurrentFile(fileMeta);
+      setItems(loadedItems);
+      setMetadata(metadataRaw);
+      setSelectedItems(validIds);
+      const validQuantities = {};
+      validIds.forEach((id) => {
+        if (quantities[id] != null) validQuantities[id] = quantities[id];
+      });
+      setOrderReformDraft({
+        key: Date.now(),
+        quantities: validQuantities,
+        exportFormat: order.export_format || 'excel',
+      });
+      setActiveTabSafe('order');
+      toast.success(`Заказ #${orderId}: позиции загружены — отредактируйте и сформируйте заново`);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  }, [normalizeItemsList, setActiveTabSafe]);
 
   const selectedCount = useMemo(() => selectedItems.length, [selectedItems]);
 
@@ -429,9 +509,12 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <OrderForm
+                key={orderReformDraft?.key ?? 'order-default'}
                 fileId={currentFile.id}
                 selectedItems={selectedItems}
                 items={items}
+                initialQuantities={orderReformDraft?.quantities}
+                initialExportFormat={orderReformDraft?.exportFormat}
               />
             </motion.div>
           )}
@@ -444,7 +527,7 @@ function AppContent({ fullAccess = false, role = 'user' }) {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
-              <OrdersHistory />
+              <OrdersHistory onReformOrder={handleReformOrderFromHistory} />
             </motion.div>
           )}
 

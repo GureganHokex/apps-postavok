@@ -5,12 +5,19 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { getOrders, downloadOrder, getOrder, createOrder, getOrderStatistics, getApiErrorMessage } from '../api';
+import {
+  getOrders,
+  downloadOrder,
+  getOrder,
+  deleteOrder,
+  getOrderStatistics,
+  getApiErrorMessage,
+} from '../api';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import './OrdersHistory.css';
 
-function OrdersHistory() {
+function OrdersHistory({ onReformOrder }) {
   const { isAdmin } = useAuth();
   const [filters, setFilters] = useState({
     date_from: '',
@@ -26,7 +33,7 @@ function OrdersHistory() {
         date_from: filters.date_from || undefined,
         date_to: filters.date_to || undefined,
       }),
-    staleTime: 30000, // 30 секунд
+    staleTime: 30000,
   });
 
   const orders = useMemo(() => {
@@ -62,35 +69,39 @@ function OrdersHistory() {
     }
   }, []);
 
-  const handleDuplicateOrder = useCallback(async (orderId) => {
-    try {
-      const order = await getOrder(orderId);
-      if (!order.items || order.items.length === 0) {
-        toast.error('Заказ не содержит позиций');
+  const handleReformOrder = useCallback(
+    async (orderId) => {
+      if (!onReformOrder) {
+        toast.error('Повторное формирование недоступно');
         return;
       }
-      
-      // Извлекаем item_id и quantity из заказа
-      const orderItems = order.items.map(item => ({
-        item_id: item.item_id || item.id,
-        quantity: item.quantity || 1,
-      }));
-      
-      // Создаем новый заказ с теми же позициями
-      const newOrder = await createOrder(orderItems, order.export_format || 'excel');
-      toast.success(`Заказ #${order.id} продублирован как заказ #${newOrder.id}`);
-      
-      // Обновляем список заказов
-      refetch();
-      
-      // Автоматически скачиваем новый заказ
-      setTimeout(() => {
-        downloadOrder(newOrder.id);
-      }, 500);
-    } catch (err) {
-      toast.error(`Ошибка дублирования заказа: ${getApiErrorMessage(err)}`);
-    }
-  }, [refetch]);
+      await onReformOrder(orderId);
+    },
+    [onReformOrder],
+  );
+
+  const handleDeleteOrder = useCallback(
+    async (orderId) => {
+      if (
+        !window.confirm(
+          `Удалить заказ #${orderId} из истории? Это действие нельзя отменить.`,
+        )
+      ) {
+        return;
+      }
+      try {
+        await deleteOrder(orderId);
+        toast.success(`Заказ #${orderId} удалён`);
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(null);
+        }
+        refetch();
+      } catch (err) {
+        toast.error(`Ошибка удаления: ${getApiErrorMessage(err)}`);
+      }
+    },
+    [refetch, selectedOrder],
+  );
 
   /** Дата и время для карточек заказов */
   const formatDate = (dateString) => {
@@ -113,17 +124,18 @@ function OrdersHistory() {
 
   const { data: statsData, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['order-statistics', filters.date_from, filters.date_to],
-    queryFn: () => getOrderStatistics({
-      date_from: filters.date_from || undefined,
-      date_to: filters.date_to || undefined,
-    }),
+    queryFn: () =>
+      getOrderStatistics({
+        date_from: filters.date_from || undefined,
+        date_to: filters.date_to || undefined,
+      }),
     staleTime: 60000,
     enabled: isAdmin,
   });
   const stats = statsData || null;
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
+    return orders.filter((order) => {
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         return (
@@ -179,10 +191,7 @@ function OrdersHistory() {
             onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
             className="input"
           />
-          <button
-            className="button button-primary"
-            onClick={() => refetch()}
-          >
+          <button className="button button-primary" onClick={() => refetch()}>
             Обновить
           </button>
         </div>
@@ -276,10 +285,23 @@ function OrdersHistory() {
                     {(stats.price_trend || []).map((row) => (
                       <tr key={row.item_id}>
                         <td>{row.name}</td>
-                        <td>{row.first_price} ({formatDateOnly(row.first_date)})</td>
-                        <td>{row.last_price} ({formatDateOnly(row.last_date)})</td>
-                        <td className={row.change_percent > 0 ? 'price-up' : row.change_percent < 0 ? 'price-down' : ''}>
-                          {row.change_percent > 0 ? '+' : ''}{row.change_percent}%
+                        <td>
+                          {row.first_price} ({formatDateOnly(row.first_date)})
+                        </td>
+                        <td>
+                          {row.last_price} ({formatDateOnly(row.last_date)})
+                        </td>
+                        <td
+                          className={
+                            row.change_percent > 0
+                              ? 'price-up'
+                              : row.change_percent < 0
+                                ? 'price-down'
+                                : ''
+                          }
+                        >
+                          {row.change_percent > 0 ? '+' : ''}
+                          {row.change_percent}%
                         </td>
                       </tr>
                     ))}
@@ -287,7 +309,9 @@ function OrdersHistory() {
                 </table>
               </div>
               {(stats.price_trend || []).length === 0 && (
-                <p className="stats-empty">Нет данных об изменении цен (нужно минимум 2 цены по позиции)</p>
+                <p className="stats-empty">
+                  Нет данных об изменении цен (нужно минимум 2 цены по позиции)
+                </p>
               )}
             </section>
           </div>
@@ -329,7 +353,7 @@ function OrdersHistory() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="order-details">
                     <div className="detail-item">
                       <span className="detail-label">Позиций:</span>
@@ -365,16 +389,24 @@ function OrdersHistory() {
                       <>
                         <button
                           className="button button-secondary"
-                          onClick={() => handleDuplicateOrder(order.id)}
-                          title="Создать копию этого заказа"
+                          onClick={() => handleReformOrder(order.id)}
+                          title="Открыть форму заказа с теми же позициями и количествами (новый заказ создаётся только после «Сформировать»)"
                         >
-                          Повторить
+                          Сформировать снова
                         </button>
                         <button
                           className="button button-success"
                           onClick={() => handleDownload(order.id)}
                         >
                           Скачать
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-danger"
+                          onClick={() => handleDeleteOrder(order.id)}
+                          title="Удалить заказ из истории"
+                        >
+                          Удалить
                         </button>
                       </>
                     )}
@@ -400,17 +432,20 @@ function OrdersHistory() {
             >
               <div className="modal-header">
                 <h2>Детали заказа #{selectedOrder.id}</h2>
-                <button
-                  className="modal-close"
-                  onClick={() => setSelectedOrder(null)}
-                >
+                <button className="modal-close" onClick={() => setSelectedOrder(null)}>
                   Закрыть
                 </button>
               </div>
               <div className="modal-body">
-                <p><strong>Дата создания:</strong> {formatDate(selectedOrder.created_at)}</p>
-                <p><strong>Формат:</strong> {selectedOrder.export_format}</p>
-                <p><strong>Позиций:</strong> {selectedOrder.items?.length || 0}</p>
+                <p>
+                  <strong>Дата создания:</strong> {formatDate(selectedOrder.created_at)}
+                </p>
+                <p>
+                  <strong>Формат:</strong> {selectedOrder.export_format}
+                </p>
+                <p>
+                  <strong>Позиций:</strong> {selectedOrder.items?.length || 0}
+                </p>
                 {getDisplayItems(selectedOrder).length > 0 && (
                   <div className="order-items-list">
                     <h3>Позиции заказа:</h3>
@@ -419,11 +454,32 @@ function OrdersHistory() {
                         <li key={idx}>
                           {(item.brewery || item.beer_name)
                             ? `${item.brewery ? `${item.brewery} | ` : ''}${item.beer_name || ''}`.trim()
-                            : `ID: ${item.item_id}`
-                          }, Количество: {item.quantity}
+                            : `ID: ${item.item_id}`}
+                          , Количество: {item.quantity}
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {isAdmin && (
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={() => {
+                        handleReformOrder(selectedOrder.id);
+                        setSelectedOrder(null);
+                      }}
+                    >
+                      Сформировать снова
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-danger"
+                      onClick={() => handleDeleteOrder(selectedOrder.id)}
+                    >
+                      Удалить заказ
+                    </button>
                   </div>
                 )}
               </div>
@@ -436,4 +492,3 @@ function OrdersHistory() {
 }
 
 export default OrdersHistory;
-

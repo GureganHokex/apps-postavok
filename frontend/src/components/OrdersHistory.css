@@ -226,6 +226,13 @@
   border-radius: var(--radius-sm);
 }
 
+.OrdersHistory .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
 /* Расширенная статистика заказов */
 .OrdersHistory .stats-loading {
   padding: var(--spacing-md);
